@@ -106,6 +106,10 @@ function changePaintjob( veh, paintjob )
 	local player = client
 	paintjob = tonumber(paintjob)
 	if not validMechanicVehicle(player, veh) or not paintjob or paintjob ~= math.floor(paintjob) or paintjob < 0 or paintjob > 3 then return false end
+		if getVehiclePaintjob(veh) == paintjob then
+			outputChatBox("This car already has this paintjob.", player, 255, 0, 0)
+			return false
+		end
 		local mechcost = 7500
 		if getMechanicDiscount(player) > 1 then
 			mechcost = mechcost / getMechanicDiscount(player)
