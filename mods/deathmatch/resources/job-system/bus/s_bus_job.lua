@@ -145,16 +145,8 @@ function payBusDriver(line, stop)
 	progress.lastStop = stop
 	doPay(player)
 	removeDriver(player)
-	if drivers[line] then
-		for index, point in ipairs(route.points) do
-			if point[4] == true and tonumber(point[5]) == stop then
-				local nextIndex = index + 1
-				if drivers[line][nextIndex] then
-					table.insert(drivers[line][nextIndex], player)
-				end
-				break
-			end
-		end
+	if drivers[line] and drivers[line][stop + 1] then
+		table.insert(drivers[line][stop + 1], player)
 	end
 	updateBusBlips(line)
 	return true
