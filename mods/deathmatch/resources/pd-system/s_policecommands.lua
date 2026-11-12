@@ -37,7 +37,7 @@ function tellNearbyPlayersVehicleStrobesOn()
 		triggerClientEvent(nearbyPlayer, "forceElementStreamIn", source)
 	end
 end
-addEvent("forceElementStreamIn", true)
+addEvent("forceElementStreamIn", false)
 addEventHandler("forceElementStreamIn", getRootElement(), tellNearbyPlayersVehicleStrobesOn)
 
 function theftSystem(thePlayer, commandName, targetPlayer)
