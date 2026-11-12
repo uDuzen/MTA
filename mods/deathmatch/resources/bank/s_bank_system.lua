@@ -418,7 +418,7 @@ function addBankTransactionLog(fromAccount, toAccount, amount, type, reason, det
 end
 -- Internal server-side helper; clients must not be able to forge transaction history.
 addEvent("addBankTransactionLog", false)
-addEventHandler("addBankTransactionLog", resourceRoot, addBankTransactionLog)
+addEventHandler("addBankTransactionLog", root, addBankTransactionLog)
 
 
 --MAXIME
