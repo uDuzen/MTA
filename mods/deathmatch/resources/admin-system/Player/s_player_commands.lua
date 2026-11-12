@@ -1957,7 +1957,7 @@ function nudgePlayer(thePlayer, commandName, targetPlayer)
 			if (logged==0) then
 			   outputChatBox("Player is not logged in.", thePlayer, 255, 0, 0)
 			else
-				triggerClientEvent ( "playNudgeSound", targetPlayer)
+				triggerClientEvent(targetPlayer, "playNudgeSound", targetPlayer)
 				outputChatBox("You have nudged " .. targetPlayerName .. ".", thePlayer)
 				outputChatBox("You have been nudged by " .. getPlayerName(thePlayer) .. ".", targetPlayer)
 			end
@@ -1975,7 +1975,7 @@ function earthquake(thePlayer, commandName, shakeIntensity)
 		end
 		local players = exports.pool:getPoolElementsByType("player")
 		for index, arrayPlayer in ipairs(players) do
-			triggerClientEvent("doEarthquake", arrayPlayer, shakeIntensity)
+			triggerClientEvent(arrayPlayer, "doEarthquake", arrayPlayer, shakeIntensity)
 		end
 	end
 end
