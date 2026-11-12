@@ -507,7 +507,12 @@ local function moveFromElement( element, slot, ammo, index )
 	if not canAccessElement( source, element ) then
 		return false
 	end
-	local item = getItems( element )[slot]
+	local inventory = getItems(element)
+	local item = inventory and inventory[tonumber(slot)]
+	if not item then
+		triggerClientEvent(source, "finishItemMove", source)
+		return false
+	end
 	if not canPickup(source, item) then
 		outputChatBox("You can not move this item. Contact an admin via F1.", source, 255, 0, 0)
 		return
