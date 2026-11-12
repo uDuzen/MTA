@@ -474,6 +474,7 @@ function callbackRespawnVehicles(factionID)
 	local theTeam = getFactionFromID(factionID)
 	if not isElement(theTeam) then return false end
 	local factionCooldown = getElementData(theTeam, "cooldown")
+	local source = client
 	if not hasMemberPermissionTo(client, factionID, "respawn_vehs") then
 		outputChatBox("Not allowed, sorry.", client)
 		return
@@ -530,6 +531,7 @@ function callbackRespawnOneVehicle(vehicleID, factionID)
 	local theTeam = getFactionFromID(factionID)
 	local theVehicle = exports.pool:getElement("vehicle", vehicleID)
 	if not isElement(theTeam) then return false end
+	local source = client
 	if not hasMemberPermissionTo(client, factionID, "respawn_vehs") then
 		outputChatBox("Not allowed, sorry.", source, 255, 0, 0)
 		return
@@ -644,7 +646,13 @@ addEvent("faction:fnote", true)
 addEventHandler("faction:fnote", getRootElement(), callbackUpdateFNote)
 
 function callbackRemovePlayer(removedPlayerName, factionID)
+	factionID = tonumber(factionID)
+	if not client or not factionID or factionID < 1 or type(removedPlayerName) ~= "string"
+		or #removedPlayerName < 1 or #removedPlayerName > 64 or not isFactionMember(client, factionID)
+		or not hasMemberPermissionTo(client, factionID, "del_member") then return false end
+	local source = client
 	local theTeam = getFactionFromID(factionID)
+	if not isElement(theTeam) then return false end
 	if not hasMemberPermissionTo(client, factionID, "del_member") then
 		outputChatBox("Not allowed, sorry.", client)
 		return
@@ -702,6 +710,17 @@ addEvent("cguiKickPlayer", true)
 addEventHandler("cguiKickPlayer", getRootElement(), callbackRemovePlayer)
 
 function callbackPerkEdit(perkIDTable, playerName, factionID)
+	factionID = tonumber(factionID)
+	if not client or not factionID or factionID < 1 or not isFactionMember(client, factionID)
+		or type(perkIDTable) ~= "table" or #perkIDTable > 50
+		or type(playerName) ~= "string" or #playerName < 1 or #playerName > 64
+		or not hasMemberPermissionTo(client, factionID, "set_member_duty") then
+		return false
+	end
+	for _, perkID in ipairs(perkIDTable) do
+		local id = tonumber(perkID)
+		if not id or id < 1 or id ~= math.floor(id) then return false end
+	end
 	if not hasMemberPermissionTo(client, factionID, "set_member_duty") then
 		outputChatBox("Not allowed, sorry.", client)
 		return
@@ -729,7 +748,10 @@ addEvent("faction:perks:edit", true)
 addEventHandler("faction:perks:edit", getRootElement(), callbackPerkEdit)
 
 function callbackQuitFaction(factionID)
+	factionID = tonumber(factionID)
+	if not client or not factionID or factionID < 1 or not isFactionMember(client, factionID) then return false end
 	local theTeam = getFactionFromID(factionID)
+	if not isElement(theTeam) then return false end
 	local username = getPlayerName(client)
 	local theTeamName = getTeamName(theTeam)
 
