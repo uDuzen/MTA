@@ -308,7 +308,7 @@ function cancelPhoneCall(reason)
 		writeCellphoneLogToClient(caller1)
 		resetPhoneState(caller1)
 		if caller1Phonestate == 3 then
-			triggerClientEvent("stopRinging", caller1)
+			triggerClientEvent(caller1, "stopRinging", caller1)
 		elseif caller1Phonestate == 5 then
 			triggerClientEvent(caller1, "phone:updateDialingScreen", caller1, isQuitType(reason) and reason or "called, answered but they canceled")
 		end
@@ -349,7 +349,7 @@ function cancelPhoneCall(reason)
 			writeCellphoneLogToClient(caller2)
 			resetPhoneState(caller2)
 			if caller2Phonestate == 3 then
-				triggerClientEvent("stopRinging", caller2)
+				triggerClientEvent(caller2, "stopRinging", caller2)
 			elseif caller2Phonestate == 4 or caller2Phonestate == 5 then
 				triggerClientEvent(caller2, "phone:updateDialingScreen", caller2, isQuitType(reason) and reason or "called, answered but they canceled")
 			end
@@ -370,7 +370,7 @@ function acceptPhoneCall()
 	local source = player
 	if not canPlayerAnswerCall(source) then
 		outputChatBox("You can not use cellphone at the moment.", source, 255,0,0)
-		triggerClientEvent("stopRinging", source)
+		triggerClientEvent(source, "stopRinging", source)
 		return false
 	end
 	local phonestate = getElementData(source, "phonestate") or 0
