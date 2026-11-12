@@ -273,18 +273,20 @@ addEventHandler("transferMoneyToPersonal", getRootElement(), transferMoneyToPers
 	16: Impound
 ]]
 
-function tellTransfersPersonal(cardInfo)
-	local dbid = getElementData(client, "dbid")
-	if cardInfo then
-		dbid = cardInfo
-	end
+function tellTransfersPersonal()
+	if not client or tonumber(getElementData(client, "loggedin")) ~= 1 then return false end
+	local dbid = tonumber(getElementData(client, "dbid"))
+	if not dbid or dbid < 1 then return false end
+	-- Never accept an account/card owner ID from the client.
 	tellTransfers(client, dbid, "recievePersonalTransfer")
 end
 
 function tellTransfersBusiness(name)
-	local dbid = exports.factions:getFactionIDFromName(name)
-	--local dbid = tonumber(getElementData(getPlayerTeam(client), "id")) or 0
-	if dbid > 0 then
+	if not client or tonumber(getElementData(client, "loggedin")) ~= 1
+		or type(name) ~= "string" or #name > 64 then return false end
+	local dbid = tonumber(exports.factions:getFactionIDFromName(name))
+	if dbid and dbid > 0
+		and exports.factions:hasMemberPermissionTo(client, dbid, "manage_finance") then
 		tellTransfers(client, -dbid, "recieveBusinessTransfer")
 	end
 end
@@ -414,8 +416,9 @@ function addBankTransactionLog(fromAccount, toAccount, amount, type, reason, det
 
 	return mysql:query_free(sql) 
 end
-addEvent("addBankTransactionLog", true)
-addEventHandler("addBankTransactionLog", getRootElement(), addBankTransactionLog)
+-- Internal server-side helper; clients must not be able to forge transaction history.
+addEvent("addBankTransactionLog", false)
+addEventHandler("addBankTransactionLog", resourceRoot, addBankTransactionLog)
 
 
 --MAXIME
