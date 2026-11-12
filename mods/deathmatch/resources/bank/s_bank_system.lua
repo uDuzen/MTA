@@ -1,3 +1,14 @@
+local MAX_BANK_TRANSACTION = 1000000000
+
+local function validateBankAmount(value)
+	local amount = tonumber(value)
+	if not amount or amount ~= amount or amount == math.huge or amount == -math.huge
+		or amount < 1 or amount > MAX_BANK_TRANSACTION or amount ~= math.floor(amount) then
+		return false
+	end
+	return amount
+end
+
 mysql = exports.mysql
 function setElementDataEx(theElement, theParameter, theValue, syncToClient, noSyncAtall)
 	if syncToClient == nil then
@@ -46,12 +57,15 @@ addEvent( "bank:showGeneralServiceGUI", true )
 addEventHandler( "bank:showGeneralServiceGUI", getRootElement(), showGeneralServiceGUI )
 
 function withdrawMoneyPersonal(amount)
+	amount = validateBankAmount(amount)
+	if not client or not amount then return false end
 	local state = tonumber(getElementData(client, "loggedin")) or 0
 	if (state == 0) then
 		return
 	end
 	
-	local money = getElementData(client, "bankmoney") - amount
+	local balance = tonumber(getElementData(client, "bankmoney")) or 0
+	local money = balance - amount
 	if money >= 0 then
 		exports.global:giveMoney(client, amount, true)
 		
@@ -70,6 +84,8 @@ addEvent("withdrawMoneyPersonal", true)
 addEventHandler("withdrawMoneyPersonal", getRootElement(), withdrawMoneyPersonal)
 
 function depositMoneyPersonal(amount)
+	amount = validateBankAmount(amount)
+	if not client or not amount then return false end
 	local state = tonumber(getElementData(client, "loggedin")) or 0
 	if (state == 0) then
 		return
@@ -89,6 +105,12 @@ addEvent("depositMoneyPersonal", true)
 addEventHandler("depositMoneyPersonal", getRootElement(), depositMoneyPersonal)
 
 function withdrawMoneyBusiness(amount, factionID)
+	amount = validateBankAmount(amount)
+	factionID = tonumber(factionID)
+	if not client or not amount or not factionID or factionID < 1
+		or not exports.factions:hasMemberPermissionTo(client, factionID, "manage_finance") then
+		return false
+	end
 	local state = tonumber(getElementData(client, "loggedin")) or 0
 	if (state == 0) then
 		return
@@ -107,6 +129,12 @@ addEvent("withdrawMoneyBusiness", true)
 addEventHandler("withdrawMoneyBusiness", getRootElement(), withdrawMoneyBusiness)
 
 function depositMoneyBusiness(amount, factionID)
+	amount = validateBankAmount(amount)
+	factionID = tonumber(factionID)
+	if not client or not amount or not factionID or factionID < 1
+		or not exports.factions:hasMemberPermissionTo(client, factionID, "manage_finance") then
+		return false
+	end
 	local state = tonumber(getElementData(client, "loggedin")) or 0
 	if (state == 0) then
 		return
