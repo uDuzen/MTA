@@ -96,8 +96,12 @@ addEventHandler( "savePlayer", getRootElement(),
 
 -- subscribe from inventory changes
 local function subscribeChanges( element )
-	sendItems( element, source )
-	subscribers[ element ][ source ] = true
+	if not isElement(source) or getElementType(source) ~= "player"
+		or not isElement(element) then return false end
+	subscribers[element] = subscribers[element] or {}
+	sendItems(element, source)
+	subscribers[element][source] = true
+	return true
 end
 
 addEvent( "subscribeToInventoryChanges", false )
@@ -105,7 +109,10 @@ addEventHandler( "subscribeToInventoryChanges", getRootElement(), subscribeChang
 
 -- Send items without subscription
 local function sendCurrentInventory( element )
-	sendItems( element, source )
+	if not isElement(source) or getElementType(source) ~= "player"
+		or not isElement(element) then return false end
+	sendItems(element, source)
+	return true
 end
 
 addEvent( "sendCurrentInventory", false )
@@ -113,8 +120,12 @@ addEventHandler( "sendCurrentInventory", getRootElement(), sendCurrentInventory 
 
 -- remove from inventory changes list
 local function unsubscribeChanges( element )
-	subscribers[ element ][ source ] = nil
-	triggerClientEvent( source, "recieveItems", element )
+	if not isElement(source) or getElementType(source) ~= "player" then return false end
+	if subscribers[element] then
+		subscribers[element][source] = nil
+	end
+	triggerClientEvent(source, "recieveItems", element)
+	return true
 end
 
 addEvent( "unsubscribeFromInventoryChanges", false )
@@ -215,7 +226,7 @@ function itemResourceStarted( )
 		loadItems( source )
 	end
 end
-addEvent( "itemResourceStarted", true )
+addEvent( "itemResourceStarted", false )
 addEventHandler( "itemResourceStarted", getRootElement( ), itemResourceStarted )
 
 -- clear all items for an element
@@ -408,7 +419,12 @@ end
 
 -- updates the item value
 function updateMetadata(element, slot, key, value)
-	element = client or element
+	if not client then return false end
+	element = client
+	if type(slot) ~= "number" or slot < 1 or slot ~= math.floor(slot)
+		or type(key) ~= "string" or #key < 1 or #key > 64 then
+		return false
+	end
 	if getElementType(element) ~= "player" then
 		-- this is mostly because we pass the player element to permission checks
 		outputDebugString("Can currently not update metadata for non-players.", 2)
