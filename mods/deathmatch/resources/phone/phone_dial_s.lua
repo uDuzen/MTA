@@ -376,11 +376,11 @@ function acceptPhoneCall()
 	local phonestate = getElementData(source, "phonestate") or 0
 	if phonestate ~= 3 then
 		outputChatBox("You phone is not ringing.", source, 255,0,0)
-		triggerClientEvent("stopRinging", source)
+		triggerClientEvent(source, "stopRinging", source)
 		return false
 	end
 
-	triggerClientEvent("stopRinging", source)
+	triggerClientEvent(source, "stopRinging", source)
 
 	local calledNo = tonumber(getElementData(source, "callingwith"))
 	local callerNo = tonumber(getElementData(source, "calling"))
