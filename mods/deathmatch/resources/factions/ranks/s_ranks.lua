@@ -44,7 +44,9 @@ addEventHandler("faction-system.addFactionRank", root, function(rank, perms, fac
 	end
 	if type(rank) ~= "string" then return false end
 	rank = rank:match("^%s*(.-)%s*$")
-	if #rank < 1 or #rank > 32 or type(perms) ~= "table" then return false end
+	perms = tonumber(perms)
+	if #rank < 1 or #rank > 32 or not perms or perms < 1
+		or getRankFaction(perms) ~= fID then return false end
 		-- Check for Same Rank Name
 	for i,rankID in ipairs(getFactionRanks(fID)) do
 		local rankName = getRankName(rankID)
@@ -72,10 +74,13 @@ function addFactionRank(FactionID, rankName, permissions, plr)
 	if type(permissions) ~= "table" then
 		permissions = getDefaultPermissionSet("New Member")
 	end
-	local safePermissions = {}
+	local safePermissions, seenPermissions = {}, {}
 	for _, permission in ipairs(permissions) do
-		if type(permission) == "string" and #permission <= 64 then
-			table.insert(safePermissions, permission)
+		local permissionID = tonumber(permission)
+		if permissionID and permissionID >= 1 and permissionID <= #mem_permissions
+			and permissionID == math.floor(permissionID) and not seenPermissions[permissionID] then
+			seenPermissions[permissionID] = true
+			table.insert(safePermissions, tostring(permissionID))
 		end
 	end
 	permissions = table.concat(safePermissions, ",")
