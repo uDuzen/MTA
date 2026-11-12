@@ -1,37 +1,43 @@
-function makeKey(thePlayer, commandName, keyType, keyID)
-	local logged = getElementData(thePlayer, "loggedin")
-	
-	if (logged==1) then
-		if(getElementData(thePlayer,"job")==6)then
-			if not (keyType) or not (keyID) then
-				outputChatBox("SYNTAX: /" .. commandName .. " [Key Type: 1=House 2=Business 3=Vehicle] [Key ID]", thePlayer, 255, 194, 14)
-			else
-				if not exports.global:hasMoney(thePlayer, 25) then
-					outputChatBox("You do not have enough money to duplicate a key.", thePlayer, 255, 0, 0)
-				else
-					-- Translate keytype to key item IDs.
-					if (tonumber(keyType) == 1) then
-						itemID = 4 --House Key
-						keyname = "house key"
-					elseif(tonumber(keyType) == 2) then
-						itemID = 5 -- Business Key
-						keyname = "business key"
-					elseif(tonumber(keyType) == 3) then
-						itemID = 3 -- Vehicle Key
-						keyname = "vehicle key"
-					end
-					local success = exports.global:hasItem(thePlayer, tonumber(itemID), tonumber(keyID))
-					if(success)then -- does the player have the key?
-						exports.global:giveItem(thePlayer, tonumber(itemID), tonumber(keyID)) -- create a ket for the locksmith.
-						exports.global:takeMoney(thePlayer, 25) -- take the cost of making the key from the locksmith.
-						outputChatBox("You have duplicated a ".. keyname .." ".. keyID .." at a cost of $15.", thePlayer)
-						exports.global:sendLocalMeAction(thePlayer,"duplicates a ".. keyname ..".")
-					else
-						outputChatBox("You do not have that key.", thePlayer, 255, 0, 0)
-					end
-				end
-			end
-		end
+local KEY_TYPES = {
+	[1] = { itemID = 4, name = "house key" },
+	[2] = { itemID = 5, name = "business key" },
+	[3] = { itemID = 3, name = "vehicle key" }
+}
+
+function makeKey(player, commandName, keyType, keyID)
+	if not player or not isElement(player) or getElementType(player) ~= "player"
+		or tonumber(getElementData(player, "loggedin")) ~= 1
+		or tonumber(getElementData(player, "job")) ~= 6 then
+		return false
 	end
+
+	keyType, keyID = tonumber(keyType), tonumber(keyID)
+	local keyInfo = keyType and KEY_TYPES[keyType]
+	if not keyInfo or not keyID or keyID < 1 or keyID ~= math.floor(keyID) then
+		outputChatBox("SYNTAX: /" .. tostring(commandName) .. " [Key Type: 1=House 2=Business 3=Vehicle] [Key ID]", player, 255, 194, 14)
+		return false
+	end
+
+	local itemValue = math.floor(keyID)
+	if not exports.global:hasItem(player, keyInfo.itemID, itemValue) then
+		outputChatBox("You do not have that key.", player, 255, 0, 0)
+		return false
+	end
+	if not exports.global:hasMoney(player, 25) then
+		outputChatBox("You do not have enough money to duplicate a key.", player, 255, 0, 0)
+		return false
+	end
+	if not exports.global:giveItem(player, keyInfo.itemID, itemValue) then
+		outputChatBox("The duplicate key could not be created.", player, 255, 0, 0)
+		return false
+	end
+	if not exports.global:takeMoney(player, 25) then
+		exports.global:takeItem(player, keyInfo.itemID, itemValue)
+		return false
+	end
+
+	outputChatBox("You have duplicated a " .. keyInfo.name .. " " .. itemValue .. " at a cost of $25.", player)
+	exports.global:sendLocalMeAction(player, "duplicates a " .. keyInfo.name .. ".")
+	return true
 end
 addCommandHandler("copykey", makeKey, false, false)
