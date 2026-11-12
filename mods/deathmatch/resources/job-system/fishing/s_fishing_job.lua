@@ -44,7 +44,6 @@ function giveCatch()
     if fishingCooldowns[player] and now < fishingCooldowns[player] then
         return false
     end
-    fishingCooldowns[player] = now + 180000
     local x, y, z = getElementPosition(player)
     local keyset = {}
     
@@ -64,6 +63,7 @@ function giveCatch()
 
     if items:hasSpaceForItem(player, fishItem, 1) then
         items:giveItem(player, fishItem, tostring(ourFish.fishname) .. ":" .. tostring(ourFish.fishweight))
+        fishingCooldowns[player] = now + 180000
         outputChatBox("You've caught a " .. tostring(ourFish.fishname) .. "!", player, 0, 255, 0)
     end
 end
@@ -164,3 +164,8 @@ addEventHandler("fishing:giveCatch", root, giveCatch)
 addEventHandler("fishing:takeRod", root, takeRod)
 addEventHandler("fishing:GeneratePayment", root, GenerateFishPayment)
 addEventHandler("fishing:sellFish", root, sellTheFish)
+
+addEventHandler("onPlayerQuit", root, function()
+    fishingCooldowns[source] = nil
+    fishingQuotes[source] = nil
+end)
