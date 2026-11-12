@@ -22,7 +22,7 @@ function doTheCall(thePlayer, location, message)
 		return false
 	end
 	npc911Cooldown[caller] = now
-	thePlayer = caller
+	local thePlayer = caller
 	location = location:gsub("[%c]", " ")
 	message = message:gsub("[%c]", " ")
 
