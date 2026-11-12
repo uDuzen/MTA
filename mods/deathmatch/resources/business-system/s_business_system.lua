@@ -95,6 +95,6 @@ function setBusinessNotification(thePlayer, commandName, ...)
 end
 addCommandHandler("setbiznote", setBusinessNotification)
 
-addEvent( "businessSystem:setBizNote",true )
+addEvent( "businessSystem:setBizNote", false )
 addEventHandler( "businessSystem:setBizNote", getRootElement(), setBusinessNotification)
 
