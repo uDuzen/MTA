@@ -260,7 +260,16 @@ function cancelPhoneCall(reason)
 	if reason ~= nil and type(reason) ~= "string" then reason = nil end
 	if type(reason) == "string" and #reason > 64 then reason = reason:sub(1, 64) end
 	local session = callSessions[player]
-	if session and not session.ended then session.ended = getTickCount() end
+	if session and not session.ended then
+		session.ended = getTickCount()
+		setTimer(function(callSession)
+			if not callSession.charged then
+				for participant, current in pairs(callSessions) do
+					if current == callSession then callSessions[participant] = nil end
+				end
+			end
+		end, 10000, 1, session)
+	end
 	local col = getElementData(source, "call.col")
 	local caller2col  = nil
 	local phonestate = getElementData(source, "phonestate") or 0
