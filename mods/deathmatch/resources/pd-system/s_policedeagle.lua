@@ -1,3 +1,5 @@
+local tazerCooldowns = {}
+
 function tazerFired(x, y, z, target)
 	local shooter = client
 	if not shooter or not isElement(shooter) or getElementType(shooter) ~= "player"
@@ -6,7 +8,8 @@ function tazerFired(x, y, z, target)
 		or getPedWeapon(shooter) ~= 24 or getPedTotalAmmo(shooter) <= 0
 		or not (exports.factions:isInFactionType(shooter, 2) or exports.factions:isInFactionType(shooter, 3))
 		or not isElement(target) or getElementType(target) ~= "player"
-		or target == shooter or tonumber(getElementData(target, "loggedin")) ~= 1 then
+		or target == shooter or tonumber(getElementData(target, "loggedin")) ~= 1
+		or isTimer(tazerCooldowns[shooter]) then
 		return false
 	end
 	local px, py, pz = getElementPosition(shooter)
@@ -21,6 +24,9 @@ function tazerFired(x, y, z, target)
 			triggerClientEvent(value, "showTazerEffect", value, tx, ty, tz)
 		end
 	end
+	tazerCooldowns[shooter] = setTimer(function(player)
+		tazerCooldowns[player] = nil
+	end, 10005, 1, shooter)
 	exports.anticheat:changeProtectedElementDataEx(target, "tazed", true, false)
 	toggleAllControls(target, false, true, false)
 	exports.global:applyAnimation(target, "ped", "FLOOR_hit_f", -1, false, false, true, true, true)
@@ -52,3 +58,9 @@ function updateDeagleMode(mode)
 end
 addEvent("deaglemode", true)
 addEventHandler("deaglemode", getRootElement(), updateDeagleMode)
+
+addEventHandler("onPlayerQuit", root, function()
+	local cooldown = tazerCooldowns[source]
+	if isTimer(cooldown) then killTimer(cooldown) end
+	tazerCooldowns[source] = nil
+end)
