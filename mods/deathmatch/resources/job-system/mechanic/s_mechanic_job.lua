@@ -107,8 +107,8 @@ function changePaintjob( veh, paintjob )
 	paintjob = tonumber(paintjob)
 	if not validMechanicVehicle(player, veh) or not paintjob or paintjob ~= math.floor(paintjob) or paintjob < 0 or paintjob > 3 then return false end
 		local mechcost = 7500
-		if (getElementData(player,"faction")[4]) then
-			mechcost = mechcost / btrdiscountratio
+		if getMechanicDiscount(player) > 1 then
+			mechcost = mechcost / getMechanicDiscount(player)
 		end
 		if not exports.global:takeMoney(player, mechcost) then
 			outputChatBox("You can't afford to repaint this vehicle.", player, 255, 0, 0)
@@ -135,8 +135,8 @@ function editVehicleHeadlights( veh, color1, color2, color3 )
 	color1, color2, color3 = tonumber(color1), tonumber(color2), tonumber(color3)
 	if not validMechanicVehicle(player, veh) or not validRGB(color1) or not validRGB(color2) or not validRGB(color3) then return false end
 		local mechcost = 1250
-		if (getElementData(player,"faction")[4]) then
-			mechcost = mechcost / btrdiscountratio
+		if getMechanicDiscount(player) > 1 then
+			mechcost = mechcost / getMechanicDiscount(player)
 		end
 		if not (exports.global:hasMoney(player, mechcost) or exports.integration:isPlayerTrialAdmin(player, true)) then
 			outputChatBox("You can't afford to mod this vehicle.", player, 255, 0, 0)
@@ -172,8 +172,8 @@ function changeVehicleUpgrade( veh, upgrade )
 		end
 		local name = u[1]
 		local mechcost = u[2]
-		if (getElementData(player,"faction")[4]) then
-			mechcost = mechcost / btrdiscountratio
+		if getMechanicDiscount(player) > 1 then
+			mechcost = mechcost / getMechanicDiscount(player)
 		end
 		if exports.global:hasItem( player, 114, upgrade ) then
 			mechcost = 0
@@ -210,8 +210,8 @@ function changeVehicleColour(veh, col1, col2, col3, col4)
 	local player = client
 	if not validMechanicVehicle(player, veh) then return false end
 		local mechcost = 100
-		if (getElementData(player,"faction")[4]) then
-			mechcost = mechcost / btrdiscountratio
+		if getMechanicDiscount(player) > 1 then
+			mechcost = mechcost / getMechanicDiscount(player)
 		end
 		if not (exports.global:hasMoney(player, mechcost) or exports.integration:isPlayerTrialAdmin(player, true)) then
 			outputChatBox("You can't afford to repaint this vehicle.", player, 255, 0, 0)
