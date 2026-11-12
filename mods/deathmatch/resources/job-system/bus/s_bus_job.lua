@@ -196,7 +196,9 @@ function takeBusFare()
 		or not seat or seat == 0 then return false end
 	local driver = getVehicleOccupant(vehicle, 0)
 	if not isElement(driver) or getElementType(driver) ~= "player"
-		or tonumber(getElementData(driver, "loggedin")) ~= 1 then return false end
+		or tonumber(getElementData(driver, "loggedin")) ~= 1
+		or tonumber(getElementData(driver, "job")) ~= 3
+		or not driverProgress[driver] then return false end
 	if not exports.global:takeMoney(passenger, 5) then return false end
 	if not exports.global:giveMoney(driver, 5) then
 		exports.global:giveMoney(passenger, 5)
