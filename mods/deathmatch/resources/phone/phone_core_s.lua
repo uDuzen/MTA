@@ -108,12 +108,12 @@ function applyPhone(action, popOutOnPhoneCall, itemName)
 		end
 	end
 	if type(itemName) ~= "string" or #itemName > 64 then itemName = "cellphone" end
-	if not canPlayerCall(source) and string ~= "phone_out" then
+	if not canPlayerCall(source) and action ~= "phone_out" then
 		--return false
 	end
 	local phonestate = getElementData(source, "phonestate") or 0
-	outputDebugString("[Phone] applyPhone / phonestate = "..phonestate.. " / action = "..string)
-	if string == "phone_in" then
+	outputDebugString("[Phone] applyPhone / phonestate = "..phonestate.. " / action = "..action)
+	if action == "phone_in" then
 		--outputDebugString("[Phone] "..getPlayerName(source).." / phone_in")
 		triggerEvent('sendAme', source, "takes out " .. (getElementData(source, "gender") == 0 and "his" or "her") .. " " .. itemName .. ".")
 		if getElementData(source, "phone_anim") ~= "0" then
@@ -124,7 +124,7 @@ function applyPhone(action, popOutOnPhoneCall, itemName)
 			setElementInterior(phoneO[source], getElementInterior(source))
 			exports.bone_attach:attachElementToBone(phoneO[source], source, 12, -0.05, 0.02, 0.02, 20, -90, -10)
 
-			setPedAnimation(source, "ped", string, 1, false)
+			setPedAnimation(source, "ped", action, 1, false)
 			setPedWeaponSlot(source, 0)
 
 			--[[
@@ -142,7 +142,7 @@ function applyPhone(action, popOutOnPhoneCall, itemName)
 			--exports.anticheat:changeProtectedElementDataEx(source, "cellphoneGUIStateSynced", 1 , true)
 		end
 		exports.anticheat:changeProtectedElementDataEx(source, "cellphoneGUIStateSynced", 1 , true)
-	elseif string == "phone_talk" then
+	elseif action == "phone_talk" then
 		--outputDebugString("[Phone] "..getPlayerName(source).." / phone_talk")
 		if getElementData(source, "phone_anim") ~= "0" then
 			if not isElement(phoneO[source]) then
@@ -152,7 +152,7 @@ function applyPhone(action, popOutOnPhoneCall, itemName)
 			setElementInterior(phoneO[source], getElementInterior(source))
 
 			exports.bone_attach:attachElementToBone(phoneO[element], source, 12, -0.05, 0.02, 0.02, 20, -90, -10)
-			setPedAnimation(source, "ped", string, 1, false)
+			setPedAnimation(source, "ped", action, 1, false)
 			setPedWeaponSlot(source, 0)
 
 			--[[
@@ -170,7 +170,7 @@ function applyPhone(action, popOutOnPhoneCall, itemName)
 			--exports.anticheat:changeProtectedElementDataEx(source, "cellphoneGUIStateSynced", 1 , true)
 		end
 		exports.anticheat:changeProtectedElementDataEx(source, "cellphoneGUIStateSynced", 1 , true)
-	elseif string == "phone_out" then
+	elseif action == "phone_out" then
 		--outputDebugString("[Phone] "..getPlayerName(source).." / phone_out")
 		if phonestate > 0 and not popOutOnPhoneCall then
 			triggerEvent("phone:cancelPhoneCall", source)
@@ -181,7 +181,7 @@ function applyPhone(action, popOutOnPhoneCall, itemName)
 				triggerEvent('sendAme', source, "puts down "..(getElementData(source, "gender") == 0 and "his" or "her").." " .. itemName .. ".")
 			end
 			if getElementData(source, "phone_anim") ~= "0" then
-				setPedAnimation(source, "ped", string, 1, false)
+				setPedAnimation(source, "ped", action, 1, false)
 			end
 		end
 		exports.anticheat:changeProtectedElementDataEx(source, "cellphoneGUIStateSynced", nil , true)
