@@ -63,8 +63,10 @@ function toggleFlasherState()
 	if not (client) then
 		return false
 	end
+	if not isElement(client) or getElementType(client) ~= "player"
+		or tonumber(getElementData(client, "loggedin")) ~= 1 then return false end
 	local theVehicle = getPedOccupiedVehicle(client)
-	if not theVehicle then
+	if not theVehicle or getVehicleOccupant(theVehicle, 0) ~= client then
 		return false
 	end
 	
