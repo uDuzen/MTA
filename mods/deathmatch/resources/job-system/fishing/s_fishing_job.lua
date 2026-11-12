@@ -47,11 +47,7 @@ function giveCatch()
     local x, y, z = getElementPosition(player)
     local keyset = {}
     
-    if ( y >= 3000 ) or ( y <= -3000 ) or ( x >= 3000 ) or ( x <= -3000) then
-        whichZone = 2
-    else 
-        whichZone = 1
-    end
+    local whichZone = ((y >= 3000) or (y <= -3000) or (x >= 3000) or (x <= -3000)) and 2 or 1
 
     for i, v in ipairs(FishType) do
         if (v.zone == whichZone) then
@@ -59,7 +55,7 @@ function giveCatch()
         end
     end
 
-    ourFish = FishType[math.random(#keyset)] 
+    local ourFish = FishType[keyset[math.random(#keyset)]]
 
     if items:hasSpaceForItem(player, fishItem, 1) then
         items:giveItem(player, fishItem, tostring(ourFish.fishname) .. ":" .. tostring(ourFish.fishweight))
@@ -97,6 +93,10 @@ function GenerateFishPayment()
     local player = client
     if not player or not isElement(player) or getElementType(player) ~= "player"
         or tonumber(getElementData(player, "loggedin")) ~= 1 then
+        return false
+    end
+    local px, py, pz = getElementPosition(player)
+    if getDistanceBetweenPoints3D(px, py, pz, 133.8759765625, -1793.3427734375, 2.2126874923706) > 6 then
         return false
     end
     local fishininventory = items:countItems(player, fishItem)
@@ -139,6 +139,11 @@ function sellTheFish()
         return false
     end
 
+    local px, py, pz = getElementPosition(player)
+    if getDistanceBetweenPoints3D(px, py, pz, 133.8759765625, -1793.3427734375, 2.2126874923706) > 6 then
+        fishingQuotes[player] = nil
+        return false
+    end
     local currentCount = items:countItems(player, fishItem)
     if currentCount ~= quote.count or quote.count < 1 then
         fishingQuotes[player] = nil
