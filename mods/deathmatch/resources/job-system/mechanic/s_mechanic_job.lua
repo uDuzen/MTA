@@ -27,6 +27,10 @@ end
 function serviceVehicle(veh)
 	local player = client
 	if not validMechanicVehicle(player, veh) then return false end
+		if getElementHealth(veh) <= 950 then
+			outputChatBox("This vehicle does not need a quick service.", player, 255, 194, 14)
+			return false
+		end
 		local mechcost = 110
 		if getMechanicDiscount(source) > 1 then
 			mechcost = mechcost / getMechanicDiscount(source)
@@ -58,9 +62,6 @@ function serviceVehicle(veh)
 			exports.global:sendLocalMeAction(source, "services the vehicle, patching it up a bit.")
 			exports.logs:dbLog(source, 31, {  veh }, "REPAIR QUICK-SERVICE")
 		end
-	else
-		outputChatBox("You must be in the vehicle you want to service.", source, 255, 0, 0)
-	end
 end
 addEvent("serviceVehicle", true)
 addEventHandler("serviceVehicle", getRootElement(), serviceVehicle)
@@ -70,8 +71,8 @@ function changeTyre( veh, wheelNumber )
 	wheelNumber = tonumber(wheelNumber)
 	if not validMechanicVehicle(player, veh) or not wheelNumber or wheelNumber ~= math.floor(wheelNumber) or wheelNumber < 1 or wheelNumber > 4 then return false end
 		local mechcost = 10
-		if (getElementData(source,"faction")[4]) then
-			mechcost = mechcost / btrdiscountratio
+		if getMechanicDiscount(source) > 1 then
+			mechcost = mechcost / getMechanicDiscount(source)
 		end
 		if not exports.global:hasMoney(source, mechcost) then
 			outputChatBox("You can't afford the parts to change this vehicle's tyres.", source, 255, 0, 0)
@@ -97,7 +98,6 @@ function changeTyre( veh, wheelNumber )
 			exports.logs:dbLog(source, 31, {  veh }, "REPAIR TIRESWAP")
 			exports.global:sendLocalMeAction(source, "replaces the vehicle's tyre.")
 		end
-	end
 end
 addEvent("tyreChange", true)
 addEventHandler("tyreChange", getRootElement(), changeTyre)
@@ -126,7 +126,6 @@ function changePaintjob( veh, paintjob )
 				outputChatBox("This car already has this paintjob.", source, 255, 0, 0)
 			end
 		end
-	end
 end
 addEvent("paintjobChange", true)
 addEventHandler("paintjobChange", getRootElement(), changePaintjob)
@@ -155,7 +154,6 @@ function editVehicleHeadlights( veh, color1, color2, color3 )
 				outputChatBox("This car already has this headlights.", source, 255, 0, 0)
 			end
 		end
-	end
 end
 addEvent("editVehicleHeadlights", true)
 addEventHandler("editVehicleHeadlights", getRootElement(), editVehicleHeadlights)
@@ -204,7 +202,6 @@ function changeVehicleUpgrade( veh, upgrade )
 				outputChatBox("Failed to apply the car upgrade.", source, 255, 0, 0)
 			end
 		end
-	end
 end
 addEvent("changeVehicleUpgrade", true)
 addEventHandler("changeVehicleUpgrade", getRootElement(), changeVehicleUpgrade)
@@ -225,6 +222,12 @@ function changeVehicleColour(veh, col1, col2, col3, col4)
 			local color2 = col2 or { col[4], col[5], col[6] }
 			local color3 = col3 or { col[7], col[8], col[9] }
 			local color4 = col4 or { col[10], col[11], col[12] }
+			for _, color in ipairs({ color1, color2, color3, color4 }) do
+				if type(color) ~= "table" or #color ~= 3
+					or not validRGB(tonumber(color[1])) or not validRGB(tonumber(color[2])) or not validRGB(tonumber(color[3])) then
+					return false
+				end
+			end
 
 			--outputChatBox("1. "..toJSON(color1), source)
 			--outputChatBox("2. "..toJSON(color2), source)
@@ -240,7 +243,6 @@ function changeVehicleColour(veh, col1, col2, col3, col4)
 				exports.logs:dbLog(source, 6, {  veh }, "MODDING REPAINT "..toJSON(col))
 			end
 		end
-	end
 end
 addEvent("repaintVehicle", true)
 addEventHandler("repaintVehicle", getRootElement(), changeVehicleColour)
