@@ -289,11 +289,16 @@ end)
 
 addEvent("faction-system.setFactionRankName", true)
 addEventHandler("faction-system.setFactionRankName", root, function(rankID, rankName, factionID)
-	if not hasMemberPermissionTo(client, factionID, "modify_ranks") then
+	factionID = tonumber(factionID)
+	rankID = tonumber(rankID)
+	if not client or not factionID or factionID < 1 or not rankID or rankID < 1
+		or not hasMemberPermissionTo(client, factionID, "modify_ranks")
+		or getRankFaction(rankID) ~= factionID then
 		return false
 	end
-	
-	local factionID = tonumber(factionID)
+	if type(rankName) ~= "string" then return false end
+	rankName = rankName:match("^%s*(.-)%s*$")
+	if #rankName < 1 or #rankName > 32 then return false end
 		-- Check for Same Rank Name
 	for i,rank in ipairs(getFactionRanks(factionID)) do
 		local rankNm = getRankName(rank)
@@ -303,7 +308,7 @@ addEventHandler("faction-system.setFactionRankName", root, function(rankID, rank
 		end
 	end
 	local oldName = getRankName(rankID)
-	dbExec(exports.mysql:getConn("mta"), "UPDATE `faction_ranks` SET `name` = '"..rankName.."' WHERE `id` = "..rankID)
+	dbExec(exports.mysql:getConn("mta"), "UPDATE `faction_ranks` SET `name` = ? WHERE `id` = ?", rankName, rankID)
 	outputChatBox("The '"..oldName.."' rank has been renamed to '"..rankName.."'", client, 255, 100, 100)
 	FactionRanks[rankID]["name"] = rankName
 	local factionRanks = {}
@@ -324,14 +329,15 @@ end)
 
 addEvent("faction-system.removeFactionRank", true)
 addEventHandler("faction-system.removeFactionRank", root, function(rankID, factionID)
-	-- Security check.
-	if not hasMemberPermissionTo(client, factionID, "modify_ranks") then
+	factionID = tonumber(factionID)
+	rankID = tonumber(rankID)
+	if not client or not factionID or factionID < 1 or not rankID or rankID < 1
+		or not hasMemberPermissionTo(client, factionID, "modify_ranks")
+		or getRankFaction(rankID) ~= factionID then
 		return false
 	end
-
-	local factionID = tonumber(factionID)
 	local rankName = getRankName(rankID)
-	dbExec(exports.mysql:getConn("mta"), "DELETE FROM `faction_ranks` WHERE id="..rankID) 
+	dbExec(exports.mysql:getConn("mta"), "DELETE FROM `faction_ranks` WHERE id = ?", rankID) 
 	dbQuery(resetPlayerRanks,{rankID, factionID},exports.mysql:getConn("mta"), "SELECT * FROM `characters_faction` WHERE `faction_rank` = ?", rankID)
 	outputChatBox("The '"..rankName.."' rank has been successfully deleted.", client, 255, 100, 100)
 	FactionRanks[rankID] = nil
@@ -346,7 +352,7 @@ addEventHandler("faction-system.removeFactionRank", root, function(rankID, facti
 			newrank_order = newrank_order..rID..","
 		end	
 	end	
-	dbExec(exports.mysql:getConn("mta"), "UPDATE `factions` SET `rank_order` = '"..newrank_order.."' WHERE `id` = "..factionID)
+	dbExec(exports.mysql:getConn("mta"), "UPDATE `factions` SET `rank_order` = ? WHERE `id` = ?", newrank_order, factionID)
 	exports.anticheat:setEld(theTeam, "rank_order", newrank_order, 'all')
 	exports.anticheat:setEld(theTeam, "ranks", factionRankTable, 'all')
 	getRankInfo(factionID, client)
