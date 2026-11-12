@@ -8,6 +8,12 @@ local function isFactionMember(player, factionID)
 	return factionID and type(factionData) == "table" and factionData[factionID] ~= nil
 end
 
+local function canManageDutySettings(player, factionID)
+	factionID = tonumber(factionID)
+	return factionID and factionID > 0 and isFactionMember(player, factionID)
+		and hasMemberPermissionTo(player, factionID, "modify_duty_settings")
+end
+
 -- EVENTS
 addEvent("onPlayerJoinFaction", false)
 addEventHandler("onPlayerJoinFaction", getRootElement(),
@@ -1069,29 +1075,28 @@ end
 
 addEvent("fetchDutyInfo", true)
 addEventHandler("fetchDutyInfo", resourceRoot, function(factionID)
-	if not factionID then return end
-
+	factionID = tonumber(factionID)
+	if not client or not factionID or factionID < 1 or not isFactionMember(client, factionID) then return false end
 	local elementInfo = getElementData(resourceRoot, "DutyGUI")
+	if type(elementInfo) ~= "table" then elementInfo = {} end
 	elementInfo[client] = factionID
 	setElementData(resourceRoot, "DutyGUI", elementInfo)
-
-	triggerClientEvent(client, "importDutyData", resourceRoot, custom[tonumber(factionID)], locations[tonumber(factionID)], factionID)
+	triggerClientEvent(client, "importDutyData", resourceRoot, custom[factionID], locations[factionID], factionID)
 end)
 
 addEvent("Duty:Grab", true)
 addEventHandler("Duty:Grab", resourceRoot, function(factionID)
-	if not factionID then return end
-
+	factionID = tonumber(factionID)
+	if not client or not factionID or factionID < 1 or not isFactionMember(client, factionID) then return false end
 	local t = getAllowList(factionID)
-
 	triggerClientEvent(client, "gotAllow", resourceRoot, t)
 end)
 
 addEvent("Duty:GetPackages", true)
 addEventHandler("Duty:GetPackages", resourceRoot, function(factionID)
 	factionID = tonumber(factionID)
-
-	triggerClientEvent(client, "Duty:GotPackages", resourceRoot, custom[factionID])
+	if not client or not factionID or factionID < 1 or not isFactionMember(client, factionID) then return false end
+	triggerClientEvent(client, "Duty:GotPackages", resourceRoot, custom[factionID] or {})
 end)
 
 function refreshClient(message, factionID, dontSendToClient)
@@ -1122,6 +1127,15 @@ end
 addEventHandler("onPlayerQuit", getRootElement(), disconnectThem)
 
 function addDuty(dutyItems, finalLocations, dutyNewSkins, name, factionID, dutyID)
+	factionID = tonumber(factionID)
+	dutyID = tonumber(dutyID) or 0
+	if not client or not canManageDutySettings(client, factionID)
+		or type(name) ~= "string" or #name < 1 or #name > 64
+		or type(dutyItems) ~= "table" or #dutyItems > 100
+		or type(finalLocations) ~= "table" or #finalLocations > 100
+		or type(dutyNewSkins) ~= "table" or #dutyNewSkins > 100
+		or dutyID < 0 or dutyID ~= math.floor(dutyID) then return false end
+	if dutyID > 0 and (not custom[factionID] or not custom[factionID][dutyID]) then return false end
 	local dutyItems = dutyItems or {}
 	local finalLocations = finalLocations or {}
 	local dutyNewSkins = dutyNewSkins or {}
@@ -1154,6 +1168,16 @@ addEvent("Duty:AddDuty", true)
 addEventHandler("Duty:AddDuty", resourceRoot, addDuty)
 
 function addLocation(x, y, z, r, i, d, name, factionID, index)
+	factionID = tonumber(factionID)
+	x, y, z, r, i, d = tonumber(x), tonumber(y), tonumber(z), tonumber(r), tonumber(i), tonumber(d)
+	index = index and tonumber(index) or nil
+	if not client or not canManageDutySettings(client, factionID)
+		or not x or not y or not z or not r or r < 1 or r > 100
+		or not i or i < 0 or i ~= math.floor(i) or not d or d < 0 or d ~= math.floor(d)
+		or math.abs(x) > 3000 or math.abs(y) > 3000 or z < -1000 or z > 2000
+		or type(name) ~= "string" or #name < 1 or #name > 64
+		or (index and (index < 1 or index ~= math.floor(index))) then return false end
+	if index and (not locations[factionID] or not locations[factionID][index]) then return false end
 	local interiorElement = exports.pool:getElement("interior", d) or d == 0
 	if interiorElement then
 		local interiorF = 0
@@ -1196,6 +1220,10 @@ addEvent("Duty:AddLocation", true)
 addEventHandler("Duty:AddLocation", resourceRoot, addLocation)
 
 function addVehicle(vehicleID, factionID)
+	factionID = tonumber(factionID)
+	vehicleID = tonumber(vehicleID)
+	if not client or not canManageDutySettings(client, factionID)
+		or not vehicleID or vehicleID < 1 or vehicleID ~= math.floor(vehicleID) then return false end
 	local element = exports.pool:getElement("vehicle", vehicleID)
 	if element then
 		if getElementData(element, "faction") == factionID then
@@ -1221,9 +1249,14 @@ addEvent("Duty:AddVehicle", true)
 addEventHandler("Duty:AddVehicle", resourceRoot, addVehicle)
 
 function removeLocation(removeID, factionID)
-	locations[tonumber(factionID)][tonumber(removeID)] = nil
+	factionID = tonumber(factionID)
+	removeID = tonumber(removeID)
+	if not client or not canManageDutySettings(client, factionID)
+		or not removeID or removeID < 1 or removeID ~= math.floor(removeID)
+		or not locations[factionID] or not locations[factionID][removeID] then return false end
+	locations[factionID][removeID] = nil
 	exports.duty:destroyDutyColShape(factionID, removeID)
-	mysql:query_free("DELETE FROM duty_locations WHERE id=" .. removeID)
+	dbExec(mysql:getConn("mta"), "DELETE FROM duty_locations WHERE id=? AND factionID=?", removeID, factionID)
 	exports.logs:dbLog(client, 35, "fa" .. tostring(factionID), "Removed Location #" .. removeID)
 	--outputChatBox("Duty Location removed!", client, 0, 255, 0)
 
@@ -1234,8 +1267,13 @@ addEvent("Duty:RemoveLocation", true)
 addEventHandler("Duty:RemoveLocation", resourceRoot, removeLocation)
 
 function removeDuty(removeID, factionID)
-	custom[tonumber(factionID)][tonumber(removeID)] = nil
-	mysql:query_free("DELETE FROM duty_custom WHERE id=" .. removeID)
+	factionID = tonumber(factionID)
+	removeID = tonumber(removeID)
+	if not client or not canManageDutySettings(client, factionID)
+		or not removeID or removeID < 1 or removeID ~= math.floor(removeID)
+		or not custom[factionID] or not custom[factionID][removeID] then return false end
+	custom[factionID][removeID] = nil
+	dbExec(mysql:getConn("mta"), "DELETE FROM duty_custom WHERE id=? AND factionID=?", removeID, factionID)
 	exports.logs:dbLog(client, 35, "fa" .. tostring(factionID), "Removed duty #" .. removeID)
 	--outputChatBox("Custom Duty Loadout removed!", client, 0, 255, 0)
 
