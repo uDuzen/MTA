@@ -114,18 +114,21 @@ function asyncReconActivate(cur)
 	if not targetID or targetID < 1 or targetID ~= math.floor(targetID) then return false end
 	local target = exports.pool:getElement("player", targetID)
 	if not isElement(target) or getElementType(target) ~= "player"
-		or target == player or tonumber(getElementData(target, "loggedin")) ~= 1
-		or reconSessions[player] then
+		or target == player or tonumber(getElementData(target, "loggedin")) ~= 1 then
 		return false
 	end
 
-	local x, y, z = getElementPosition(player)
-	local rx, ry, rz = getElementRotation(player)
-	reconSessions[player] = {
-		x = x, y = y, z = z, rx = rx, ry = ry, rz = rz,
-		dim = getElementDimension(player), int = getElementInterior(player),
-		target = target
-	}
+	if not reconSessions[player] then
+		local x, y, z = getElementPosition(player)
+		local rx, ry, rz = getElementRotation(player)
+		reconSessions[player] = {
+			x = x, y = y, z = z, rx = rx, ry = ry, rz = rz,
+			dim = getElementDimension(player), int = getElementInterior(player),
+			target = target
+		}
+	else
+		reconSessions[player].target = target
+	end
 
 	if exports.freecam:isEnabled(player) then
 		triggerEvent("freecam:asyncDeactivateFreecam", player)
