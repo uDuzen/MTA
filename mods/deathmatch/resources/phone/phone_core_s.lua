@@ -518,7 +518,7 @@ function answerPhone(thePlayer, commandName)
 						exports['logs']:dbLog(thePlayer, 29, { thePlayer, "ph"..tostring(ownPhoneNo), foundElement, "ph"..tostring(calling) }, "**Picked up phone**")
 					end
 
-					triggerClientEvent("stopRinging", thePlayer)
+					triggerClientEvent(thePlayer, "stopRinging", thePlayer)
 				end
 			elseif not (calling) then
 				outputChatBox("Your phone is not ringing.", thePlayer, 255, 0, 0)
