@@ -203,7 +203,7 @@ addEventHandler("chargePlayer", getRootElement(), function(amount, method, crime
 
 	if type(date) == "string" and #date <= 64 then
 		for i, item in ipairs(exports["item-system"]:getItems(player) or {}) do
-			if item[1] == 217 and tostring(item[2]) == date then
+			if item[1] == 267 and tostring(item[2]) == date then
 				exports["item-system"]:takeItemFromSlot(player, i)
 				break
 			end
