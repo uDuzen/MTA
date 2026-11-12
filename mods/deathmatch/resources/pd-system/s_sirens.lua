@@ -18,6 +18,13 @@ addEventHandler("onVehicleRespawn", getRootElement(), vehicleBlown)
 ]]
 
 function setSirenState(type)
+    local player = client
+    if not player or not isElement(player) or getElementType(player) ~= "player"
+        or tonumber(getElementData(player, "loggedin")) ~= 1 then return false end
+    local vehicle = getPedOccupiedVehicle(player)
+    if not vehicle or getVehicleOccupant(vehicle, 0) ~= player then return false end
+    if type ~= "horn" and type ~= "wail" and type ~= "priority" and type ~= "yelp" and type ~= "off" then return false end
+    local source = vehicle
     if exports.global:hasItem(source, 85) or exports.global:hasItem(source, 261) or exports.global:hasItem(source, 269) then -- sirens
     	if type == "horn" then
             exports.anticheat:changeProtectedElementDataEx(source, "lspd:siren", 4)
