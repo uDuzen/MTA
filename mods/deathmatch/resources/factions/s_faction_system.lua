@@ -993,7 +993,12 @@ addEvent('factionmenu:setphone', true)
 addEventHandler('factionmenu:setphone', root,
 	function(playerName, number, factionID)
 		factionID = tonumber(factionID)
-		number = number ~= nil and tonumber(number) or nil
+		if number ~= nil and tostring(number) ~= "" then
+			number = tonumber(number)
+			if not number then return false end
+		else
+			number = nil
+		end
 		if not client or not factionID or factionID < 1 or type(playerName) ~= "string"
 			or #playerName < 1 or #playerName > 64
 			or (number ~= nil and (number < 0 or number > 99 or number ~= math.floor(number)))
@@ -1182,8 +1187,8 @@ function addLocation(x, y, z, r, i, d, name, factionID, index)
 	if interiorElement then
 		local interiorF = 0
 		if isElement(interiorElement) then
-			interiorStatus = getElementData(interiorElement, "status")
-			interiorF = interiorStatus.faction
+			local interiorStatus = getElementData(interiorElement, "status")
+			interiorF = type(interiorStatus) == "table" and tonumber(interiorStatus.faction) or 0
 		end
 
 		if tonumber(interiorF) == tonumber(factionID) or d == 0 then
