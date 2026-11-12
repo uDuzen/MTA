@@ -259,7 +259,6 @@ function transferMoneyToPersonal( fromFactionId, name, amount, reason )
 			return not outputChatBox("Transaction failed. Insufficient balance.", client, 255,0, 0)
 		end
 	end
-end
 addEvent("transferMoneyToPersonal", true)
 addEventHandler("transferMoneyToPersonal", getRootElement(), transferMoneyToPersonal)
 
