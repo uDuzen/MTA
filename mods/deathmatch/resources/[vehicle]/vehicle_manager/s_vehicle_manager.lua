@@ -98,7 +98,8 @@ function vehiclesearch(thePlayer, keyword )
 	if keyword ~= "" and keyword ~= "Search..." then
 		local vehiclesResultList = {}
 		local mQuery1 = nil
-		mQuery1 = mysql:query("SELECT *, v.id AS id, TO_SECONDS(lastUsed) AS lastused_sec FROM vehicles v LEFT JOIN vehicles_shop s ON v.vehicle_shop_id=s.id LEFT JOIN characters c ON v.owner=c.id LEFT JOIN factions f ON v.faction=f.id WHERE v.id LIKE '%"..keyword.."%'  OR vehmtamodel LIKE '%"..keyword.."%' OR vehbrand LIKE '%"..keyword.."%' OR vehyear LIKE '%"..keyword.."%' OR c.charactername LIKE '%"..keyword.."%' OR f.name LIKE '%"..keyword.."%' OR f.name LIKE '%"..keyword.."%' ORDER BY v.id DESC")
+		local searchTerm = mysql:escape_string(keyword)
+		mQuery1 = mysql:query("SELECT *, v.id AS id, TO_SECONDS(lastUsed) AS lastused_sec FROM vehicles v LEFT JOIN vehicles_shop s ON v.vehicle_shop_id=s.id LEFT JOIN characters c ON v.owner=c.id LEFT JOIN factions f ON v.faction=f.id WHERE v.id LIKE '%"..searchTerm.."%' OR vehmtamodel LIKE '%"..searchTerm.."%' OR vehbrand LIKE '%"..searchTerm.."%' OR vehyear LIKE '%"..searchTerm.."%' OR c.charactername LIKE '%"..searchTerm.."%' OR f.name LIKE '%"..searchTerm.."%' ORDER BY v.id DESC")
 		while true do
 			local row = mysql:fetch_assoc(mQuery1)
 			if not row then break end
@@ -201,15 +202,17 @@ function saveAdminNote(vehID, adminNote, noteId)
 		return false
 	end
 
+	local accountID = tonumber(getElementData(thePlayer, "account:id"))
+	if not accountID or accountID < 1 then return false end
 	if noteId then
-		if mysql:query_free("UPDATE vehicle_notes SET note='"..mysql:escape_string(adminNote).."', creator="..getElementData(source, "account:id").." WHERE id ="..noteId.." AND vehid="..vehID) then
+		if mysql:query_free("UPDATE vehicle_notes SET note='"..mysql:escape_string(adminNote).."', creator="..accountID.." WHERE id ="..noteId.." AND vehid="..vehID) then
 			outputChatBox("You have successfully updated admin note entry #"..noteId.." on vehicle #"..vehID..".", thePlayer, 0, 255,0)
 			addVehicleLogs(vehID, "Modified admin note entry #"..noteId, thePlayer)
 			return true
 		end
 	else
 		--outputChatBox("INSERT INTO vehicle_notes SET note='"..mysql:escape_string(adminNote).."', creator="..getElementData(source, "account:id")..", vehid="..vehID )
-		local insertedId = mysql:query_insert_free("INSERT INTO vehicle_notes SET note='"..mysql:escape_string(adminNote).."', creator="..tonumber(getElementData(thePlayer, "account:id"))..", vehid="..vehID )
+		local insertedId = mysql:query_insert_free("INSERT INTO vehicle_notes SET note='"..mysql:escape_string(adminNote).."', creator="..accountID..", vehid="..vehID )
 		if insertedId then
 			outputChatBox("You have successfully added a new admin note entry #"..insertedId.." to vehicle #"..vehID..".", thePlayer, 0, 255,0)
 			addVehicleLogs(vehID, "Added new admin note entry #"..insertedId, thePlayer)
