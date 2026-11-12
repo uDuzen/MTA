@@ -39,10 +39,10 @@ addEventHandler("fetchTickets", getRootElement(), function()
 				"My name is Emma, how may I help you " .. (getElementData(player, "gender") == 1 and "ma'am" or "sir") .. "?",
 				"You have " .. #tickets .. " unpaid ticket" .. (#tickets > 1 and "s" or "") .. ", would you like to pay " .. (#tickets == 1 and "it" or "them") .. "?"
 			}
-			outputChatBox(" [English] " .. pedname .. " says: " .. quotes[math.random(1, 3)], source, 255, 255, 255)
+			outputChatBox(" [English] " .. pedname .. " says: " .. quotes[math.random(1, 3)], player, 255, 255, 255)
 			triggerClientEvent(player, "showPayGUI", player, tickets)
 		else
-			outputChatBox(" [English] " .. pedname .. " says: Sorry. You have no unpaid tickets on record.", source, 255, 255, 255)
+			outputChatBox(" [English] " .. pedname .. " says: Sorry. You have no unpaid tickets on record.", player, 255, 255, 255)
 		end
 	end
 end)
