@@ -69,8 +69,7 @@ function withdrawMoneyPersonal(amount)
 	local balance = tonumber(getElementData(client, "bankmoney")) or 0
 	local money = balance - amount
 	if money >= 0 then
-		exports.global:giveMoney(client, amount, true)
-		
+		if not exports.global:giveMoney(client, amount, true) then return false end
 		setElementDataEx(client, "bankmoney", money, true)
 		saveBank(client)
 		
@@ -125,6 +124,9 @@ function withdrawMoneyBusiness(amount, factionID)
 			mysql:query_free("INSERT INTO wiretransfers (`from`, `to`, `amount`, `reason`, `type`) VALUES (" .. mysql:escape_string(-getElementData(theTeam, "id")) .. ", " .. mysql:escape_string(getElementData(client, "dbid")) .. ", " .. mysql:escape_string(amount) .. ", '', 4)" ) 
 			outputChatBox("You withdrew $" .. exports.global:formatMoney(amount) .. " from your business account.", client, 255, 194, 14)
 			exports.logs:dbLog(client, 25, theTeam, "WITHDRAW FROM BUSINESS " .. amount)
+		else
+			exports.global:giveMoney(theTeam, amount)
+			return false
 		end
 	end
 end
@@ -149,6 +151,9 @@ function depositMoneyBusiness(amount, factionID)
 			mysql:query_free("INSERT INTO wiretransfers (`from`, `to`, `amount`, `reason`, `type`) VALUES (" .. mysql:escape_string(getElementData(client, "dbid")) .. ", " .. mysql:escape_string(-getElementData(theTeam, "id")) .. ", " .. mysql:escape_string(amount) .. ", '', 5)" )
 			outputChatBox("You deposited $" .. exports.global:formatMoney(amount) .. " into your business account.", client, 255, 194, 14)
 			exports.logs:dbLog(client, 25, theTeam, "DEPOSIT TO BUSINESS " .. amount)
+		else
+			exports.global:giveMoney(client, amount)
+			return false
 		end
 	else
 	outputChatBox("You don't have that amount in one sorted money item.", client, 255, 194, 14)
@@ -425,47 +430,69 @@ addEvent("addBankTransactionLog", false)
 addEventHandler("addBankTransactionLog", root, addBankTransactionLog)
 
 
---MAXIME
-function hasBankMoney(thePlayer, amount)
-	amount = tonumber(amount) 
-	amount = math.floor(math.abs(amount))
-	if getElementType(thePlayer) == "player" then
-		return getElementData(thePlayer, "bankmoney") >= amount
-	elseif getElementType(thePlayer) == "team" then
-		return getElementData(thePlayer, "money") >= amount
+-- MAXIME: validated bank account helpers.
+local function validateBankAccountTarget(target, amount)
+	if not target or not isElement(target) then return false end
+	local elementType = getElementType(target)
+	if elementType ~= "player" and elementType ~= "team" then return false end
+	amount = tonumber(amount)
+	if not amount or amount ~= amount or amount == math.huge or amount == -math.huge
+		or amount < 0 or amount > MAX_BANK_TRANSACTION or amount ~= math.floor(amount) then
+		return false
 	end
+	local idKey = elementType == "player" and "dbid" or "id"
+	local accountID = tonumber(getElementData(target, idKey))
+	if not accountID or accountID < 1 then return false end
+	return elementType, math.floor(amount), math.floor(accountID)
+end
+
+function hasBankMoney(thePlayer, amount)
+	local accountType, safeAmount = validateBankAccountTarget(thePlayer, amount)
+	if not accountType then return false end
+	local balanceKey = accountType == "player" and "bankmoney" or "money"
+	local balance = tonumber(getElementData(thePlayer, balanceKey)) or 0
+	return balance >= safeAmount
 end
 
 function takeBankMoney(thePlayer, amount, force)
-	amount = tonumber(amount)
-	amount = math.floor(math.abs(amount))
-	if not force and not hasBankMoney(thePlayer, amount) then
-		return false, "Lack of money in bank"
+	local accountType, safeAmount, accountID = validateBankAccountTarget(thePlayer, amount)
+	if not accountType then return false end
+	local balanceKey = accountType == "player" and "bankmoney" or "money"
+	local balance = tonumber(getElementData(thePlayer, balanceKey)) or 0
+	if not force and balance < safeAmount then return false, "Lack of money in bank" end
+	if force and balance < safeAmount then return false, "Insufficient balance" end
+	local tableName = accountType == "player" and "characters" or "factions"
+	local columnName = accountType == "player" and "bankmoney" or "bankbalance"
+	if not dbExec(mysql:getConn("mta"), "UPDATE `" .. tableName .. "` SET `" .. columnName .. "` = `" .. columnName .. "` - ? WHERE `id` = ? AND `" .. columnName .. "` >= ?", safeAmount, accountID, safeAmount) then
+		return false
 	end
-	if getElementType(thePlayer) == "player" then
-		return setElementDataEx(thePlayer, "bankmoney", getElementData(thePlayer, "bankmoney")-amount, true) and mysql:query_free("UPDATE `characters` SET `bankmoney`=bankmoney-"..amount.." WHERE `id`='"..getElementData(thePlayer, "dbid").."' ") 
-	elseif getElementType(thePlayer) == "team" then
-		return setElementDataEx(thePlayer, "money", getElementData(thePlayer, "money")-amount, true) and mysql:query_free("UPDATE `factions` SET `bankbalance`=bankbalance-"..amount.." WHERE `id`='"..getElementData(thePlayer, "id").."' ") 
-	end
+	setElementDataEx(thePlayer, balanceKey, balance - safeAmount, true)
+	return true
 end
 
 function giveBankMoney(thePlayer, amount)
-	if not thePlayer then return end
-	amount = tonumber(amount)
-	amount = math.floor(math.abs(amount))
-	if getElementType(thePlayer) == "player" then
-		return setElementDataEx(thePlayer, "bankmoney", getElementData(thePlayer, "bankmoney")+amount, true) and mysql:query_free("UPDATE `characters` SET `bankmoney`=bankmoney+"..amount.." WHERE `id`='"..getElementData(thePlayer, "dbid").."' ") 
-	elseif getElementType(thePlayer) == "team" then
-		return setElementDataEx(thePlayer, "money", getElementData(thePlayer, "money")+amount, true) and mysql:query_free("UPDATE `factions` SET `bankbalance`=bankbalance+"..amount.." WHERE `id`='"..getElementData(thePlayer, "id").."' ") 
+	local accountType, safeAmount, accountID = validateBankAccountTarget(thePlayer, amount)
+	if not accountType then return false end
+	local balanceKey = accountType == "player" and "bankmoney" or "money"
+	local balance = tonumber(getElementData(thePlayer, balanceKey)) or 0
+	local tableName = accountType == "player" and "characters" or "factions"
+	local columnName = accountType == "player" and "bankmoney" or "bankbalance"
+	if not dbExec(mysql:getConn("mta"), "UPDATE `" .. tableName .. "` SET `" .. columnName .. "` = `" .. columnName .. "` + ? WHERE `id` = ?", safeAmount, accountID) then
+		return false
 	end
+	setElementDataEx(thePlayer, balanceKey, balance + safeAmount, true)
+	return true
 end
 
 function setBankMoney(thePlayer, amount)
-	amount = tonumber(amount)
-	amount = math.floor(math.abs(amount))
-	if getElementType(thePlayer) == "player" then
-		return setElementDataEx(thePlayer, "bankmoney", amount, true) and mysql:query_free("UPDATE `characters` SET `bankmoney`="..amount.." WHERE `id`='"..getElementData(thePlayer, "dbid").."' ") 
-	elseif getElementType(thePlayer) == "team" then
-		return setElementDataEx(thePlayer, "money", amount, true) and mysql:query_free("UPDATE `factions` SET `bankbalance`="..amount.." WHERE `id`='"..getElementData(thePlayer, "id").."' ") 
+	local accountType, safeAmount, accountID = validateBankAccountTarget(thePlayer, amount)
+	if not accountType then return false end
+	local balanceKey = accountType == "player" and "bankmoney" or "money"
+	local tableName = accountType == "player" and "characters" or "factions"
+	local columnName = accountType == "player" and "bankmoney" or "bankbalance"
+	if not dbExec(mysql:getConn("mta"), "UPDATE `" .. tableName .. "` SET `" .. columnName .. "` = ? WHERE `id` = ?", safeAmount, accountID) then
+		return false
 	end
+	setElementDataEx(thePlayer, balanceKey, safeAmount, true)
+	return true
 end
