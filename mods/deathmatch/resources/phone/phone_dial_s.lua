@@ -7,6 +7,7 @@ phonestate = 3 / called, is being rang
 phonestate = 4 /
 ]]
 local dialingTimers = {}
+local callSessions = {}
 
 function addDialingTimer(key, value)
 	key = tonumber(key)
@@ -20,12 +21,18 @@ end
 
 local tmpElement = {}
 function startDialing(to, from)
-	local displayedFrom = from
-	local owningPlayer, realFrom = resolveVirtualPhoneNumber(from)
-	if owningPlayer and displayedFrom and exports.global:hasItem(source, 2) then
-		-- virtual phone number; ignore not having the particular phone
+	local player = client
+	if not player or not isElement(player) or getElementType(player) ~= "player"
+		or tonumber(getElementData(player, "loggedin")) ~= 1
+		or (type(to) ~= "string" and type(to) ~= "number") or #tostring(to) > 32 then return false end
+	local source = player
+	local displayedFrom = tonumber(from)
+	if not displayedFrom then return false end
+	local owningPlayer, realFrom = resolveVirtualPhoneNumber(displayedFrom)
+	if owningPlayer and owningPlayer == player and exports.global:hasItem(player, 2) then
+		-- virtual phone number owned by the caller
 		from = realFrom
-	elseif not exports.global:hasItem(source, 2, tonumber(from)) then
+	elseif not exports.global:hasItem(player, 2, displayedFrom) then
 		outputDebugString("[Phone] "..getPlayerName(source).." started calling from "..from.." to "..to.." without a phone.")
 		outputChatBox("Error Code x0EDSCVF23. Please report on http://bugs.owlgaming.net", source, 255,0,0)
 		triggerClientEvent(source, "phone:slidePhoneOut", source)
@@ -247,6 +254,13 @@ phonestate = 4 / caller, connected.
 phonestate = 5 / called, connected.
 ]]
 function cancelPhoneCall(reason)
+	local player = client or source
+	if not isElement(player) or getElementType(player) ~= "player" then return false end
+	local source = player
+	if reason ~= nil and type(reason) ~= "string" then reason = nil end
+	if type(reason) == "string" and #reason > 64 then reason = reason:sub(1, 64) end
+	local session = callSessions[player]
+	if session and not session.ended then session.ended = getTickCount() end
 	local col = getElementData(source, "call.col")
 	local caller2col  = nil
 	local phonestate = getElementData(source, "phonestate") or 0
@@ -350,6 +364,10 @@ addEventHandler("accounts:characters:change", root, cancelPhoneCall)
 addEventHandler("onPlayerQuit", root, cancelPhoneCall)
 
 function acceptPhoneCall()
+	local player = client
+	if not player or not isElement(player) or getElementType(player) ~= "player"
+		or tonumber(getElementData(player, "loggedin")) ~= 1 then return false end
+	local source = player
 	if not canPlayerAnswerCall(source) then
 		outputChatBox("You can not use cellphone at the moment.", source, 255,0,0)
 		triggerClientEvent("stopRinging", source)
@@ -370,6 +388,13 @@ function acceptPhoneCall()
 	killDialingTimers(callerNo)
 	triggerClientEvent(source,"phone:slidePhoneIn", source, calledNo, true)
 	local found, caller = searchForPhone(callerNo)
+	if not found or not isElement(caller) or getElementType(caller) ~= "player" then
+		triggerEvent("phone:cancelPhoneCall", source, "caller_unavailable")
+		return false
+	end
+	local session = { caller = caller, callee = source, started = getTickCount(), charged = false }
+	callSessions[caller] = session
+	callSessions[source] = session
 	if not getElementData(caller, "call.col") then
 		triggerClientEvent(caller, "phone:updateDialingScreen", caller, "connected", getElementData(caller,"callingContact"))
 	else
@@ -386,28 +411,39 @@ addEventHandler("phone:acceptPhoneCall", root, acceptPhoneCall)
 
 
 function takeCallCost(cost, fromNumber, duration)
-	if cost > 0 then
-		if exports.bank:takeBankMoney(source, cost) then
-			local foundFaction = nil
-			for _, faction in pairs(getElementsByType("team")) do
-				--outputDebugString(tonumber(getElementData(faction, "id")) )
-				if tonumber(getElementData(faction, "id")) == 20 then --LSN
-					foundFaction = faction
-					break
-				end
-			end
-
-			if not foundFaction then
-				outputDebugString ("phone / takeCallCost / didn't find the faction from id ")
-				return false
-			end
-
-			if exports.global:giveMoney(foundFaction, cost) then
-				return exports.bank:addBankTransactionLog(getElementData(source, "dbid"), -20, cost, 2, "Cellphone's phone call fee", "Call made from #"..fromNumber..", duration: "..duration, nil, nil)
+	local player = client
+	local session = player and callSessions[player]
+	if not player or not isElement(player) or not session or session.charged
+		or not isElement(session.caller) then return false end
+	local elapsed = math.max(0, math.floor(((session.ended or getTickCount()) - session.started) / 1000))
+	local actualCost = math.min(5000, math.ceil(elapsed * 0.305))
+	session.charged = true
+	local caller = session.caller
+	local callerID = tonumber(getElementData(caller, "dbid"))
+	if not callerID then return false end
+	if actualCost > 0 then
+		local foundFaction
+		for _, faction in ipairs(getElementsByType("team")) do
+			if tonumber(getElementData(faction, "id")) == 20 then
+				foundFaction = faction
+				break
 			end
 		end
+		if not foundFaction or not exports.bank:takeBankMoney(caller, actualCost) then
+			for participant, current in pairs(callSessions) do
+				if current == session then callSessions[participant] = nil end
+			end
+			return false
+		end
+		if exports.global:giveMoney(foundFaction, actualCost) then
+			exports.bank:addBankTransactionLog(callerID, -20, actualCost, 2,
+				"Cellphone's phone call fee", "Server-calculated call duration: "..elapsed.." seconds", nil, nil)
+		end
 	end
-	return false
+	for participant, current in pairs(callSessions) do
+		if current == session then callSessions[participant] = nil end
+	end
+	return true
 end
 addEvent("phone:takeCallCost", true)
 addEventHandler("phone:takeCallCost", root, takeCallCost)
@@ -436,7 +472,10 @@ function loudSpeaker(thePlayer, commandName)
 end
 addCommandHandler("loudspeaker", loudSpeaker)
 addEvent('phone:loudspeaker', true)
-addEventHandler('phone:loudspeaker', root, loudSpeaker)
+addEventHandler('phone:loudspeaker', root, function()
+	if not client then return false end
+	return loudSpeaker(client, "loudspeaker")
+end)
 
 --- filter people by vehicles with window states
 function sendLocalText(sender, message, r, g, b, distance, exclude, useFocusColors, ignoreDeaths)
