@@ -2,6 +2,22 @@ local mysql = exports.mysql
 
 local datatable = { } -- key: vehicleID
 local factionstable = { } -- key: factionID
+local pendingInsuranceQuotes = {}
+local pendingInsuranceSales = {}
+
+local function getCurrentInsuranceFaction(player)
+	if not isElement(player) or getElementType(player) ~= "player"
+		or tonumber(getElementData(player, "loggedin")) ~= 1 then return false end
+	local factionID = tonumber(exports.factions:getCurrentFactionDuty(player))
+	if not factionID or not factionstable[factionID]
+		or not exports.factions:isPlayerInFaction(player, factionID) then return false end
+	return factionID
+end
+
+local function isInsuranceManager(player, factionID)
+	return getCurrentInsuranceFaction(player) == tonumber(factionID)
+		and exports.factions:hasMemberPermissionTo(player, tonumber(factionID), "manage_finance")
+end
 
 function updateClientCache(updateTo, newTalbes)
 	triggerClientEvent(updateTo, "insurance:updateClientCache", updateTo, newTalbes)
@@ -58,11 +74,23 @@ end
 addCommandHandler("insurance", openGUI)
 
 function doSqlStuff(sqlType, factionID, newdata)
+	local player = client
 	factionID = tonumber(factionID)
-	if not tonumber(factionID) then return false end
-	mysql:query_free("UPDATE `insurance_factions` SET `"..sqlType.."`='"..mysql:escape_string(newdata).."' WHERE `factionID`="..factionID)
+	local allowedColumns = { news = true, subscription = true, gen_maxi = true }
+	if not player or not isInsuranceManager(player, factionID)
+		or not allowedColumns[sqlType] or not factionstable[factionID] then return false end
+	if sqlType == "gen_maxi" then
+		newdata = tonumber(newdata)
+		if not newdata or newdata < 0.0001 or newdata > 0.1 then return false end
+	else
+		if type(newdata) ~= "string" or #newdata > 5000 then return false end
+	end
+	if not dbExec(mysql:getConn("mta"), "UPDATE `insurance_factions` SET `"..sqlType.."`=? WHERE `factionID`=?", newdata, factionID) then
+		return false
+	end
 	factionstable[factionID][sqlType] = newdata
-	updateClientCache(source, {datatable, factionstable}) -- source here is the player that triggered this event.
+	updateClientCache(player, {datatable, factionstable})
+	return true
 end
 addEvent("insurance:sql", true)
 addEventHandler("insurance:sql", resourceRoot, doSqlStuff)
@@ -100,52 +128,75 @@ function getVehicleData(id)
 end
 
 function sellInfo(id)
+	local player = client
+	local factionID = getCurrentInsuranceFaction(player)
+	id = tonumber(id)
+	if not factionID or not id or id < 1 or id ~= math.floor(id) then return false end
 	local price, brand, model, year, owner, plate = getVehicleData(id)
-
 	if brand and model and year and owner then
-		triggerClientEvent("insurance:clientrecieve:sell", source, owner, year, brand, model)
+		triggerClientEvent(player, "insurance:clientrecieve:sell", player, owner, year, brand, model)
+		return true
 	end
+	return false
 end
 addEvent("insurance:sellinfo", true)
 addEventHandler("insurance:sellinfo", root, sellInfo)
 
 function calculateFromClient(id, factionID, charge)
-	if not id then return false end
+	local player = client
 	id = tonumber(id)
-
+	factionID = tonumber(factionID)
+	if not player or not id or id < 1 or id ~= math.floor(id)
+		or not factionID or getCurrentInsuranceFaction(player) ~= factionID
+		or not factionstable[factionID] then return false end
 	local price, brand, model, year, name, plate = getVehicleData(id)
 	if not price then return false end
-
-	if tonumber(charge) then
-		local estimatedpremium = calculatePremium(price, factionstable[factionID]["gen_maxi"])
-		local premium = calculatePremium(price, factionstable[factionID]["gen_maxi"], charge)
-		triggerClientEvent("insurance:clientrecieve", source, name, year, brand, model, plate, price, estimatedpremium, premium)
+	local estimatedpremium = calculatePremium(price, factionstable[factionID]["gen_maxi"])
+	local premium
+	if charge == "faction" then
+		premium = estimatedpremium
 	else
-		local estimatedpremium = calculatePremium(price, factionstable[factionID]["gen_maxi"])
-		triggerClientEvent("insurance:clientrecieve", source, name, year, brand, model, plate, price, estimatedpremium)
+		charge = tonumber(charge)
+		if not charge or charge < 0.1 or charge > 10 then return false end
+		premium = calculatePremium(price, factionstable[factionID]["gen_maxi"], charge)
 	end
+	pendingInsuranceQuotes[player] = {
+		vehicleID = id, factionID = factionID, premium = premium,
+		expires = getTickCount() + 120000
+	}
+	triggerClientEvent(player, "insurance:clientrecieve", player, name, year, brand, model, plate, price, estimatedpremium, premium)
+	return true
 end
 addEvent("insurance:calculate", true)
 addEventHandler("insurance:calculate", root, calculateFromClient)
 
 function sellPremium(customerId, price, vehicle, protection)
-	local salesman = source
-	--let's try a safe way. / thinking of another way to make this cuz it's calling out and calling back too many times. kinda lost.
-
-	--local customer = exports.pool:getElement("player", customerId) -- yeah it think it does
+	local salesman = client
 	local customer = customerId
-	if isElement(salesman) and isElement(customer) and tonumber(price) and tonumber(vehicle) and protection then
-		if tonumber(price) < 0 or tonumber(price) > 50000 then return false end
-		price = math.ceil(tonumber(price))
-
-		local theVehicle = exports.pool:getElement("vehicle", tonumber(vehicle))
-		if not theVehicle then return false end
-
-		local carshop, brand, model, year, ownerName, plate = getVehicleData(tonumber(vehicle))
-		local formatText = year.." "..brand.." "..model
-		--LOL I'm lost in your script. ya / I don't even understand how your system works. /like i don't know how insurance works
-		triggerClientEvent(customer, "insurance:confirmgui", root, tostring(price), formatText, salesman, vehicle, protection)
-	end -- not sure, i'm lost
+	local quote = salesman and pendingInsuranceQuotes[salesman]
+	price = tonumber(price)
+	vehicle = tonumber(vehicle)
+	local factionID = getCurrentInsuranceFaction(salesman)
+	if not factionID or not isElement(customer) or getElementType(customer) ~= "player"
+		or tonumber(getElementData(customer, "loggedin")) ~= 1
+		or not price or price < 1 or price > 50000 or price ~= math.floor(price)
+		or not vehicle or vehicle < 1 or vehicle ~= math.floor(vehicle)
+		or type(protection) ~= "string" or #protection < 1 or #protection > 256
+		or not quote or quote.vehicleID ~= vehicle or quote.factionID ~= factionID
+		or quote.expires < getTickCount() or quote.premium ~= price then
+		return false
+	end
+	local theVehicle = exports.pool:getElement("vehicle", vehicle)
+	if not isElement(theVehicle) or tonumber(getElementData(theVehicle, "owner")) ~= tonumber(getElementData(customer, "dbid"))
+		or datatable[vehicle] then return false end
+	local carshop, brand, model, year, ownerName, plate = getVehicleData(vehicle)
+	if not brand or not model or not year then return false end
+	pendingInsuranceSales[customer] = {
+		salesman = salesman, vehicleID = vehicle, protection = protection,
+		premium = price, factionID = factionID, expires = getTickCount() + 120000
+	}
+	triggerClientEvent(customer, "insurance:confirmgui", root, tostring(price), year.." "..brand.." "..model, salesman, vehicle, protection)
+	return true
 end
 addEvent("insurance:sell", true)
 addEventHandler("insurance:sell", root, sellPremium) -- yeah so source can be player
