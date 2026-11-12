@@ -29,6 +29,8 @@ function setElementDataEx(source, field, parameter, streamtoall, streamatall)
 end
 
 function getAllVehs(thePlayer, commandName, ...)
+	if client then thePlayer = client end
+	if not isElement(thePlayer) or getElementType(thePlayer) ~= "player" then return false end
 	if exports.integration:isPlayerTrialAdmin( thePlayer ) then
 		local vehicleList = {}
 		local mQuery1 = nil
@@ -47,43 +49,53 @@ addEvent("vehicleManager:openit", true)
 addEventHandler("vehicleManager:openit", getRootElement(), getAllVehs)
 
 function delVehCmd(thePlayer, vehID )
-	executeCommandHandler ( "delveh", thePlayer, vehID )
+	if not client then return false end
+	executeCommandHandler ( "delveh", client, vehID )
 end
 addEvent("vehicleManager:delVeh", true)
 addEventHandler("vehicleManager:delVeh", getRootElement(), delVehCmd)
 
 function gotoVeh(thePlayer, vehID )
-	executeCommandHandler ( "gotocar", thePlayer, vehID )
+	if not client then return false end
+	executeCommandHandler ( "gotocar", client, vehID )
 end
 addEvent("vehicleManager:gotoVeh", true)
 addEventHandler("vehicleManager:gotoVeh", getRootElement(), gotoVeh)
 
 function restoreVeh(thePlayer, vehID )
-	executeCommandHandler ( "restoreveh", thePlayer, vehID )
+	if not client then return false end
+	executeCommandHandler ( "restoreveh", client, vehID )
 end
 addEvent("vehicleManager:restoreVeh", true)
 addEventHandler("vehicleManager:restoreVeh", getRootElement(), restoreVeh)
 
 function removeVeh(thePlayer, vehID )
-	executeCommandHandler ( "removeveh", thePlayer, vehID )
+	if not client then return false end
+	executeCommandHandler ( "removeveh", client, vehID )
 end
 addEvent("vehicleManager:removeVeh", true)
 addEventHandler("vehicleManager:removeVeh", getRootElement(), removeVeh)
 
 function forceSellInt(thePlayer, vehID )
-	executeCommandHandler ( "fsell", thePlayer, vehID )
+	if not client then return false end
+	executeCommandHandler ( "fsell", client, vehID )
 end
 addEvent("vehicleManager:forceSellInt", true)
 addEventHandler("vehicleManager:forceSellInt", getRootElement(), forceSellInt)
 
 function openAdminNote(thePlayer, vehID )
-	executeCommandHandler ( "checkveh", thePlayer, vehID )
+	if not client then return false end
+	executeCommandHandler ( "checkveh", client, vehID )
 end
 addEvent("vehicleManager:openAdminNote", true)
 addEventHandler("vehicleManager:openAdminNote", getRootElement(), openAdminNote)
 
 function vehiclesearch(thePlayer, keyword )
-	if keyword and keyword ~= "" and keyword ~= "Search..." then
+	if not client then return false end
+	thePlayer = client
+	if not exports.integration:isPlayerTrialAdmin(thePlayer) then return false end
+	if type(keyword) ~= "string" or #keyword > 64 then return false end
+	if keyword ~= "" and keyword ~= "Search..." then
 		local vehiclesResultList = {}
 		local mQuery1 = nil
 		mQuery1 = mysql:query("SELECT *, v.id AS id, TO_SECONDS(lastUsed) AS lastused_sec FROM vehicles v LEFT JOIN vehicles_shop s ON v.vehicle_shop_id=s.id LEFT JOIN characters c ON v.owner=c.id LEFT JOIN factions f ON v.faction=f.id WHERE v.id LIKE '%"..keyword.."%'  OR vehmtamodel LIKE '%"..keyword.."%' OR vehbrand LIKE '%"..keyword.."%' OR vehyear LIKE '%"..keyword.."%' OR c.charactername LIKE '%"..keyword.."%' OR f.name LIKE '%"..keyword.."%' OR f.name LIKE '%"..keyword.."%' ORDER BY v.id DESC")
@@ -168,31 +180,39 @@ end
 addCommandHandler("checkveh", checkVeh)
 addCommandHandler("checkvehicle", checkVeh)
 addEvent("vehicleManager:checkveh", true)
-addEventHandler("vehicleManager:checkveh", getRootElement(), checkVeh)
+addEventHandler("vehicleManager:checkveh", getRootElement(), function(_, commandName, vehID)
+	if not client then return false end
+	return checkVeh(client, commandName, vehID)
+end)
 
 function saveAdminNote(vehID, adminNote, noteId)
-	if not vehID or not adminNote then
-		outputChatBox("Internal Error!", source, 255,0,0)
+	if not client or not exports.integration:isPlayerTrialAdmin(client) then return false end
+	local thePlayer = client
+	vehID = tonumber(vehID)
+	noteId = noteId and tonumber(noteId) or nil
+	if not vehID or vehID < 1 or vehID % 1 ~= 0 or type(adminNote) ~= "string" then
+		outputChatBox("Internal Error!", thePlayer, 255,0,0)
 		return false
 	end
+	if noteId and (noteId < 1 or noteId % 1 ~= 0) then return false end
 
 	if string.len(adminNote) > 500 then
-		outputChatBox("Admin note has failed to add. Reason: Exceeded 500 characters.", source, 255, 0, 0)
+		outputChatBox("Admin note has failed to add. Reason: Exceeded 500 characters.", thePlayer, 255, 0, 0)
 		return false
 	end
 
 	if noteId then
 		if mysql:query_free("UPDATE vehicle_notes SET note='"..mysql:escape_string(adminNote).."', creator="..getElementData(source, "account:id").." WHERE id ="..noteId.." AND vehid="..vehID) then
-			outputChatBox("You have successfully updated admin note entry #"..noteId.." on vehicle #"..vehID..".", source, 0, 255,0)
-			addVehicleLogs(vehID, "Modified admin note entry #"..noteId, source)
+			outputChatBox("You have successfully updated admin note entry #"..noteId.." on vehicle #"..vehID..".", thePlayer, 0, 255,0)
+			addVehicleLogs(vehID, "Modified admin note entry #"..noteId, thePlayer)
 			return true
 		end
 	else
 		--outputChatBox("INSERT INTO vehicle_notes SET note='"..mysql:escape_string(adminNote).."', creator="..getElementData(source, "account:id")..", vehid="..vehID )
-		local insertedId = mysql:query_insert_free("INSERT INTO vehicle_notes SET note='"..mysql:escape_string(adminNote).."', creator="..getElementData(source, "account:id")..", vehid="..vehID )
+		local insertedId = mysql:query_insert_free("INSERT INTO vehicle_notes SET note='"..mysql:escape_string(adminNote).."', creator="..tonumber(getElementData(thePlayer, "account:id"))..", vehid="..vehID )
 		if insertedId then
-			outputChatBox("You have successfully added a new admin note entry #"..insertedId.." to vehicle #"..vehID..".", source, 0, 255,0)
-			addVehicleLogs(vehID, "Added new admin note entry #"..insertedId, source)
+			outputChatBox("You have successfully added a new admin note entry #"..insertedId.." to vehicle #"..vehID..".", thePlayer, 0, 255,0)
+			addVehicleLogs(vehID, "Added new admin note entry #"..insertedId, thePlayer)
 			return true
 		end
 	end
