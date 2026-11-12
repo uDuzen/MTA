@@ -89,9 +89,11 @@ Checkpoints(1831.951171875, -1936.1204833984, 13.059115409851)
 
 
 function initiateCleanerJob(thePlayer)
-	
+	if not thePlayer or not isElement(thePlayer) or getElementType(thePlayer) ~= "player"
+		or tonumber(getElementData(thePlayer, "loggedin")) ~= 1 then return false end
 	local blip = createBlip(1504.0679931641, 2364.36328125, 10.8203125, 0, 2, 255, 0, 255, 255)
 	local marker = createMarker(1504.3505859375, 2363.8732910156, 10.8203125, "cylinder", 2, 0, 255, 0, 150)
+	setElementData(marker, "cleaner.owner", thePlayer, false)
 	exports.pool:allocateElement(blip)
 	exports.pool:allocateElement(marker)
 	attachElements ( marker, blip )
@@ -108,6 +110,9 @@ function initiateCleanerJob(thePlayer)
 end
 
 function startCleaningMission(thePlayer)
+	if not thePlayer or not isElement(thePlayer) or getElementType(thePlayer) ~= "player"
+		or getElementData(source, "cleaner.owner") ~= thePlayer
+		or tonumber(getElementData(thePlayer, "loggedin")) ~= 1 then return false end
 	if (isElement(thePlayer)) then
 		local attached = getElementAttachedTo ( source ) -- source is the marker; attatched is the blip
 		destroyElement(attached)
@@ -161,6 +166,7 @@ function startCleaningMission(thePlayer)
 		setElementVisibleTo(marker2, thePlayer, true)
 		
 		local colsphere = createColSphere ( x1 ,y1 ,z1 , 4 )
+		setElementData(colsphere, "cleaner.owner", thePlayer, false)
 		exports.pool:allocateElement(colsphere)
 		attachElements ( marker2, blip2 )
 		exports.anticheat:changeProtectedElementDataEx(colsphere, "attatched", marker2)
@@ -171,9 +177,12 @@ function startCleaningMission(thePlayer)
 	end
 	
 end
-addCommandHandler("cj", startCleaningMission)
+addCommandHandler("cj", initiateCleanerJob)
 
 function UpdateCheckpoints(thePlayer)
+	if not thePlayer or not isElement(thePlayer) or getElementType(thePlayer) ~= "player"
+		or getElementData(source, "cleaner.owner") ~= thePlayer
+		or getElementData(thePlayer, "cleaner.vehicle") ~= getPedOccupiedVehicle(thePlayer) then return false end
 	if ( isPedInVehicle ( thePlayer ) ) then
 		local vehicle = getPedOccupiedVehicle ( thePlayer )
 		local vehid = getElementModel ( vehicle )
@@ -239,6 +248,7 @@ function UpdateCheckpoints(thePlayer)
 				setElementVisibleTo(marker3, thePlayer, true)
 				
 				local colsphere = createColSphere ( x2 ,y2 ,z2 , 4 )
+				setElementData(colsphere, "cleaner.owner", thePlayer, false)
 				exports.pool:allocateElement(colsphere)
 				attachElements ( marker3, blip3 )
 				exports.anticheat:changeProtectedElementDataEx(colsphere, "attatched", marker3)
@@ -255,6 +265,9 @@ function UpdateCheckpoints(thePlayer)
 end
 
 function FinalCheckpoints( thePlayer )
+	if not thePlayer or not isElement(thePlayer) or getElementType(thePlayer) ~= "player"
+		or getElementData(source, "cleaner.owner") ~= thePlayer
+		or getElementData(thePlayer, "cleaner.vehicle") ~= getPedOccupiedVehicle(thePlayer) then return false end
 	if ( isPedInVehicle ( thePlayer ) ) then
 		local vehicle = getPedOccupiedVehicle ( thePlayer )
 		local vehid = getElementModel ( vehicle )
@@ -281,6 +294,7 @@ function FinalCheckpoints( thePlayer )
 			setElementVisibleTo(marker4, thePlayer, true)
 			
 			local colsphere = createColSphere (1442.3360595703, 2371.0288085938, 10.8203125, 4 )
+			setElementData(colsphere, "cleaner.owner", thePlayer, false)
 			exports.pool:allocateElement(colsphere)
 			attachElements ( marker4, blip4 )
 			exports.anticheat:changeProtectedElementDataEx(colsphere, "attatched", marker4)
@@ -295,6 +309,9 @@ function FinalCheckpoints( thePlayer )
 end
 
 function FinishCheckpoints(thePlayer)
+	if not thePlayer or not isElement(thePlayer) or getElementType(thePlayer) ~= "player"
+		or getElementData(source, "cleaner.owner") ~= thePlayer
+		or getElementData(thePlayer, "cleaner.vehicle") ~= getPedOccupiedVehicle(thePlayer) then return false end
 	if (isElement(thePlayer)) then
 		if ( isPedInVehicle ( thePlayer ) ) then
 			local vehicle = getPedOccupiedVehicle ( thePlayer )
