@@ -26,19 +26,19 @@ function hasMemberPermissionTo(player, factionID, action)
 	if (not player or not action or not factionID) then return false end
 	if (not isElement(player) or getElementType(player) ~= "player" or type(action) ~= "string" or type(factionID) ~= "number") then return false end
 	local factionID = tonumber(factionID)
-	local rankID = 0
 	local faction = getElementData(player, "faction")
-	for i,v in pairs(faction) do
-		if i == factionID then
-			rankID = tonumber(v.rank)
-		end	
-	end	
-	local perm = FactionRanks[rankID]["permissions"] or ""
+	if type(faction) ~= "table" then return false end
+	local factionInfo = faction[factionID]
+	local rankID = type(factionInfo) == "table" and tonumber(factionInfo.rank) or 0
+	local rankInfo = FactionRanks[rankID]
+	if type(rankInfo) ~= "table" then return false end
+	local perm = rankInfo["permissions"] or ""
 	if perm ~= true then
-		local perProfile = split(perm, ",")
-		for i,v in ipairs(perProfile) do
-			v = tonumber(v)
-			if (mem_permissions[v][1] == action) then
+		local perProfile = split(tostring(perm), ",")
+		for _, value in ipairs(perProfile) do
+			local permissionID = tonumber(value)
+			if permissionID and mem_permissions[permissionID]
+				and mem_permissions[permissionID][1] == action then
 				return true
 			end
 		end
@@ -82,7 +82,8 @@ function getFactionPermissions(factionID)
 	end
 	
 	local theTeam = getFactionFromID(factionID)
-	local factionType = getElementData(theTeam, "type")
+	if not isElement(theTeam) then return {} end
+	local factionType = tonumber(getElementData(theTeam, "type")) or 0
 	if (theTeam) then
 		local perms = {}
 		for i,perm in ipairs(mem_permissions) do
@@ -121,13 +122,20 @@ end
 function setAllRankPermissions(rankID, permTable, newWage, factionID)
 	if (not rankID or not permTable) then return false end
 	if (type(rankID) ~= "number" or type(permTable) ~= "table") then return false end
-	local theTeam = getFactionFromID(factionID)
+	local factionID = tonumber(factionID)
+	local theTeam = factionID and getFactionFromID(factionID)
+	local rankInfo = FactionRanks[rankID]
+	if not isElement(theTeam) or type(rankInfo) ~= "table" or type(getElementData(theTeam, "wages")) ~= "table"
+		or type(newWage) ~= "number" or newWage ~= newWage or newWage < 0 or newWage > 2500 then
+		return false
+	end
 	local factionWages = getElementData(theTeam, "wages")
 
 	table.sort(permTable)
 	permTable = table.concat(permTable, ",")
-	
-	dbExec(exports.mysql:getConn("mta"), "UPDATE `faction_ranks` SET `permissions` = ?, `wage` = ? WHERE `id` = ?", permTable, newWage, rankID)
+	if not dbExec(exports.mysql:getConn("mta"), "UPDATE `faction_ranks` SET `permissions` = ?, `wage` = ? WHERE `id` = ?", permTable, newWage, rankID) then
+		return false
+	end
 	FactionRanks[rankID]["permissions"] = permTable
 	FactionRanks[rankID]["wage"] = newWage
 	factionWages[rankID] = newWage
