@@ -2,12 +2,34 @@ armoredCars = { [427]=true, [528]=true, [432]=true, [601]=true, [428]=true } -- 
 
 local btrdiscountratio = 1.2
 
+local function validMechanicVehicle(player, vehicle)
+	if not player or not isElement(player) or getElementType(player) ~= "player"
+		or tonumber(getElementData(player, "loggedin")) ~= 1
+		or not vehicle or not isElement(vehicle) or getElementType(vehicle) ~= "vehicle" then
+		return false
+	end
+	local px, py, pz = getElementPosition(player)
+	local vx, vy, vz = getElementPosition(vehicle)
+	return getDistanceBetweenPoints3D(px, py, pz, vx, vy, vz) <= 10
+end
+
+local function getMechanicDiscount(player)
+	local factionData = getElementData(player, "faction")
+	return type(factionData) == "table" and factionData[4] and btrdiscountratio or 1
+end
+
+local function validRGB(value)
+	if type(value) ~= "number" or value ~= value or value == math.huge or value == -math.huge then return false end
+	return value == math.floor(value) and value >= 0 and value <= 255
+end
+
 -- Full Service
 function serviceVehicle(veh)
-	if (veh) then
+	local player = client
+	if not validMechanicVehicle(player, veh) then return false end
 		local mechcost = 110
-		if (getElementData(source,"faction")[4]) then
-			mechcost = mechcost / btrdiscountratio
+		if getMechanicDiscount(source) > 1 then
+			mechcost = mechcost / getMechanicDiscount(source)
 		end
 		if not (exports.global:hasMoney(source, mechcost) or exports.integration:isPlayerTrialAdmin(source, true)) then
 			outputChatBox("You can't afford the parts to service this vehicle.", source, 255, 0, 0)
@@ -44,15 +66,19 @@ addEvent("serviceVehicle", true)
 addEventHandler("serviceVehicle", getRootElement(), serviceVehicle)
 
 function changeTyre( veh, wheelNumber )
-	if (veh) then
+	local player = client
+	wheelNumber = tonumber(wheelNumber)
+	if not validMechanicVehicle(player, veh) or not wheelNumber or wheelNumber ~= math.floor(wheelNumber) or wheelNumber < 1 or wheelNumber > 4 then return false end
 		local mechcost = 10
 		if (getElementData(source,"faction")[4]) then
 			mechcost = mechcost / btrdiscountratio
 		end
-		if not exports.global:takeMoney(source, mechcost) then
+		if not exports.global:hasMoney(source, mechcost) then
 			outputChatBox("You can't afford the parts to change this vehicle's tyres.", source, 255, 0, 0)
 		else
 			local wheel1, wheel2, wheel3, wheel4 = getVehicleWheelStates( veh )
+			if not wheel1 then return false end
+			exports.global:takeMoney(source, mechcost)
 
 			if (wheelNumber==1) then -- front left
 				outputDebugString("Tyre 1 changed.")
@@ -77,7 +103,9 @@ addEvent("tyreChange", true)
 addEventHandler("tyreChange", getRootElement(), changeTyre)
 
 function changePaintjob( veh, paintjob )
-	if (veh) then
+	local player = client
+	paintjob = tonumber(paintjob)
+	if not validMechanicVehicle(player, veh) or not paintjob or paintjob ~= math.floor(paintjob) or paintjob < 0 or paintjob > 3 then return false end
 		local mechcost = 7500
 		if (getElementData(source,"faction")[4]) then
 			mechcost = mechcost / btrdiscountratio
@@ -104,7 +132,9 @@ addEvent("paintjobChange", true)
 addEventHandler("paintjobChange", getRootElement(), changePaintjob)
 
 function editVehicleHeadlights( veh, color1, color2, color3 )
-	if (veh) then
+	local player = client
+	color1, color2, color3 = tonumber(color1), tonumber(color2), tonumber(color3)
+	if not validMechanicVehicle(player, veh) or not validRGB(color1) or not validRGB(color2) or not validRGB(color3) then return false end
 		local mechcost = 1250
 		if (getElementData(source,"faction")[4]) then
 			mechcost = mechcost / btrdiscountratio
@@ -133,7 +163,9 @@ addEventHandler("editVehicleHeadlights", getRootElement(), editVehicleHeadlights
  --
 
 function changeVehicleUpgrade( veh, upgrade )
-	if (veh) then
+	local player = client
+	upgrade = tonumber(upgrade)
+	if not validMechanicVehicle(player, veh) or not upgrade or upgrade ~= math.floor(upgrade) or upgrade < 1000 or upgrade > 1193 then return false end
 		local item = false
 		local u = upgrades[upgrade - 999]
 		if not u then
@@ -178,7 +210,8 @@ addEvent("changeVehicleUpgrade", true)
 addEventHandler("changeVehicleUpgrade", getRootElement(), changeVehicleUpgrade)
 
 function changeVehicleColour(veh, col1, col2, col3, col4)
-	if (veh) then
+	local player = client
+	if not validMechanicVehicle(player, veh) then return false end
 		local mechcost = 100
 		if (getElementData(source,"faction")[4]) then
 			mechcost = mechcost / btrdiscountratio
