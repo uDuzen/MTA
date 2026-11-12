@@ -9,8 +9,8 @@
 
 local mysql = exports.mysql
 local pendingSpawnLocations = {}
-addEvent( "account:character:spawned", true )
-addEvent( 'account:character:select', true )
+addEvent( "account:character:spawned", false )
+addEvent( 'account:character:select', false )
 addEvent( 'accounts:characters:fixCharacterSpawnPosition', true )
 
 function characterList( theClient )
@@ -89,7 +89,8 @@ addEventHandler("updateCharacters", getRootElement(), reloadCharacters)
 
 
 function reconnectMe()
-    redirectPlayer(client, "", 0 )
+    if not client or not isElement(client) or getElementType(client) ~= "player" then return false end
+    redirectPlayer(client, "", 0)
 end
 addEvent("accounts:reconnectMe", true)
 addEventHandler("accounts:reconnectMe", getRootElement(), reconnectMe)
