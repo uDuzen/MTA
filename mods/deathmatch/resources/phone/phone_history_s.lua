@@ -22,22 +22,31 @@ function updatePhoneHistoryState(to, state)
 end
 
 function getHistoryData(fromPhone, forceUpdateContactList1, xoffset, yoffset)
+	local player = client
 	fromPhone = tonumber(fromPhone)
-	if forceUpdateContactList1 then
-		forceUpdateContactList(source, fromPhone)
+	if not player or not isElement(player) or tonumber(getElementData(player, "loggedin")) ~= 1
+		or not fromPhone or fromPhone < 10000 or fromPhone ~= math.floor(fromPhone)
+		or not exports.global:hasItem(player, 2, fromPhone) then
+		return false
 	end
+	if forceUpdateContactList1 == true then
+		forceUpdateContactList(player, fromPhone)
+	end
+	xoffset = math.max(-10000, math.min(10000, tonumber(xoffset) or 0))
+	yoffset = math.max(-10000, math.min(10000, tonumber(yoffset) or 0))
 	local limit = 9
 	local results = {}
 	local condition = "(`from`='"..fromPhone.."' OR `to`='"..fromPhone.."') AND !(`state`=2 AND `to`='"..fromPhone.."') "
 	local result = mysql:query("SELECT *, TO_SECONDS(`date`) AS `datesec` FROM `phone_history` WHERE "..condition.." ORDER BY `date` DESC LIMIT "..limit)
-	while true do
+	while result do
 		local row = mysql:fetch_assoc(result)
 		if not row then break end
 		table.insert(results, row)
 	end
-	mysql:free_result(result)
-	triggerClientEvent(source, "phone:refreshHistory", source, results, xoffset, yoffset, true)
+	if result then mysql:free_result(result) end
+	triggerClientEvent(player, "phone:refreshHistory", player, results, xoffset, yoffset, true)
 	mysql:query_free("DELETE FROM `phone_history` WHERE DATEDIFF(NOW(),`date`) > 30")
+	return true
 end
 addEvent("phone:getHistoryData", true)
 addEventHandler("phone:getHistoryData", root, getHistoryData)
