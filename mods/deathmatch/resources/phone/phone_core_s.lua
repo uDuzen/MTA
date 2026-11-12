@@ -53,8 +53,12 @@ function getPhoneSettings(phone, doNotCreateNew) --powerOn, ringtone, isSecret, 
 end
 
 function initiatePhoneGUI(phone, popOutOnPhoneCall)
-	if not phone or not tonumber(phone) or string.len(phone) < 5 then
-		triggerClientEvent(source, "phone:slidePhoneOut", source)
+	local player = client
+	phone = tonumber(phone)
+	if not player or not isElement(player) or tonumber(getElementData(player, "loggedin")) ~= 1
+		or not phone or phone < 10000 or phone ~= math.floor(phone)
+		or not exports.global:hasItem(player, 2, phone) then
+		if player then triggerClientEvent(player, "phone:slidePhoneOut", player) end
 		return false
 	end
 	if popOutOnPhoneCall then
@@ -64,32 +68,46 @@ function initiatePhoneGUI(phone, popOutOnPhoneCall)
 			popOutOnPhoneCall = "popOutOnPhoneCall"
 		end
 	end
-	triggerClientEvent(source, "phone:updatePhoneGUI", source, popOutOnPhoneCall or "initiate", {phone, getPhoneSettings(phone)})
-
-	phone = tonumber(phone)
-	local hasPhone, slot, itemValue, itemIndex, metadata = exports.global:hasItem(source, 2, phone)
-	local phoneName
-	if metadata then
-		phoneName = exports['item-system']:getItemName(2, phone, metadata)
-	end
-	triggerEvent("phone:applyPhone", source, "phone_in", nil, phoneName)
+	triggerClientEvent(player, "phone:updatePhoneGUI", player, popOutOnPhoneCall or "initiate", {phone, getPhoneSettings(phone)})
+	local _, _, _, _, metadata = exports.global:hasItem(player, 2, phone)
+	local phoneName = metadata and exports["item-system"]:getItemName(2, phone, metadata) or "cellphone"
+	triggerEvent("phone:applyPhone", player, "phone_in", nil, phoneName)
 	return true
 end
 addEvent("phone:initiatePhoneGUI", true)
 addEventHandler("phone:initiatePhoneGUI", root, initiatePhoneGUI)
 
 function powerOn(phone, state)
-	if not phone or not tonumber(phone) or string.len(phone) < 5 then
-		triggerClientEvent(source, "phone:powerOn:response", source, false, state)
+	local player = client
+	phone = tonumber(phone)
+	state = tonumber(state)
+	if not player or not isElement(player) or tonumber(getElementData(player, "loggedin")) ~= 1
+		or not phone or phone < 10000 or phone ~= math.floor(phone)
+		or (state ~= 0 and state ~= 1) or not exports.global:hasItem(player, 2, phone) then
+		if player then triggerClientEvent(player, "phone:powerOn:response", player, false, state) end
 		return false
 	end
-	return triggerClientEvent(source, "phone:powerOn:response", source, mysql:query_free("UPDATE `phones` SET `turnedon`='"..state.."' WHERE `phonenumber`='"..mysql:escape_string(tostring(phone)).."'"), state)
+	local success = mysql:query_free("UPDATE `phones` SET `turnedon`='"..state.."' WHERE `phonenumber`='"..mysql:escape_string(tostring(phone)).."'")
+	triggerClientEvent(player, "phone:powerOn:response", player, success, state)
+	return success
 end
 addEvent("phone:powerOn", true)
 addEventHandler("phone:powerOn", root, powerOn)
 
-function applyPhone(string, popOutOnPhoneCall, itemName)
-	itemName = itemName or "cellphone"
+function applyPhone(action, popOutOnPhoneCall, itemName)
+	local player = client or source
+	if not isElement(player) or getElementType(player) ~= "player" then return false end
+	local source = player
+	if action ~= "phone_in" and action ~= "phone_out" and action ~= "phone_talk" then return false end
+	if client then
+		if tonumber(getElementData(player, "loggedin")) ~= 1 then return false end
+		if action == "phone_in" and not exports.global:hasItem(player, 2) and not getElementData(player, "call.col") then return false end
+		if action == "phone_talk" then
+			local state = tonumber(getElementData(player, "phonestate")) or 0
+			if state ~= 4 and state ~= 5 then return false end
+		end
+	end
+	if type(itemName) ~= "string" or #itemName > 64 then itemName = "cellphone" end
 	if not canPlayerCall(source) and string ~= "phone_out" then
 		--return false
 	end
