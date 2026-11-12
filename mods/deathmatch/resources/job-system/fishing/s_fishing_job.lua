@@ -1,5 +1,7 @@
 local items = exports['item-system']
 local fishItem = 273
+local fishingCooldowns = {}
+local fishingQuotes = {}
 local FishType = {
     [1] = {fishname = "Chinese Mitten Crab", fishweight = 0.5, zone = 1},
     [2] = {fishname = "Starry Flounder", fishweight = 11, zone = 1},
@@ -26,8 +28,19 @@ local FishType = {
     [23] = {fishname = "Red Drum", fishweight = 55, zone = 2},
 }
 
-function giveCatch(ThePlayer)
-    local x, y, z = getElementPosition(ThePlayer)
+function giveCatch()
+    local player = client
+    if not player or not isElement(player) or getElementType(player) ~= "player"
+        or tonumber(getElementData(player, "loggedin")) ~= 1
+        or not items:hasItem(player, 49, 1) then
+        return false
+    end
+    local now = getTickCount()
+    if fishingCooldowns[player] and now < fishingCooldowns[player] then
+        return false
+    end
+    fishingCooldowns[player] = now + 180000
+    local x, y, z = getElementPosition(player)
     local keyset = {}
     
     if ( y >= 3000 ) or ( y <= -3000 ) or ( x >= 3000 ) or ( x <= -3000) then
@@ -44,19 +57,25 @@ function giveCatch(ThePlayer)
 
     ourFish = FishType[math.random(#keyset)] 
 
-    if items:hasSpaceForItem(ThePlayer, fishItem, 1) then
-        items:giveItem(ThePlayer, fishItem, tostring(ourFish.fishname) .. ":" .. tostring(ourFish.fishweight))
-        outputChatBox("You've caught a " .. tostring(ourFish.fishname) .. "!", ThePlayer, 0, 255, 0)
+    if items:hasSpaceForItem(player, fishItem, 1) then
+        items:giveItem(player, fishItem, tostring(ourFish.fishname) .. ":" .. tostring(ourFish.fishweight))
+        outputChatBox("You've caught a " .. tostring(ourFish.fishname) .. "!", player, 0, 255, 0)
     end
 end
 
 -- Added this function due to item system not allowing items to be taken clientside.
-function takeRod(ThePlayer)
-    items:takeItem(ThePlayer, 49, 1)
+function takeRod()
+    local player = client
+    if not player or not isElement(player) or getElementType(player) ~= "player"
+        or tonumber(getElementData(player, "loggedin")) ~= 1
+        or not items:hasItem(player, 49, 1) then
+        return false
+    end
+    return items:takeItem(player, 49, 1)
 end
 
 function getPayRate(client, money)
-	local hours = tonumber(getElementData(client, "hoursplayed"))
+	local hours = tonumber(getElementData(client, "hoursplayed")) or 0
 	local rate = money
 	local hoursrate = math.floor(hours*(rate*0.03))
 
@@ -69,20 +88,25 @@ function getPayRate(client, money)
     return rate
 end
 
-function GenerateFishPayment(ThePlayer)
-    local fishininventory = items:countItems(ThePlayer, fishItem)
+function GenerateFishPayment()
+    local player = client
+    if not player or not isElement(player) or getElementType(player) ~= "player"
+        or tonumber(getElementData(player, "loggedin")) ~= 1 then
+        return false
+    end
+    local fishininventory = items:countItems(player, fishItem)
     local fishCount = 0
     local perFishCost = 0
     local calculate = 0
     local fishPrice = 0
 
     if (fishininventory == 0) then
-        return exports.global:sendLocalText(ThePlayer, "[English] Fisherman John says: I can't buy thin air, you need to catch some fish bro.", 255, 255, 255, 10)
+        return exports.global:sendLocalText(player, "[English] Fisherman John says: I can't buy thin air, you need to catch some fish bro.", 255, 255, 255, 10)
     end
 
     -- Checks their inventory for the fish items.
 
-    for i, v in ipairs(items:getItems(ThePlayer)) do
+    for i, v in ipairs(items:getItems(player)) do
         local ItemID, ItemValue = unpack(v)
         if ItemID == fishItem then
             fishCount = fishCount + 1
@@ -94,20 +118,36 @@ function GenerateFishPayment(ThePlayer)
     local calculate = perFishCost * fishCount
     local fishPrice = calculate
 
-    fishPrice = getPayRate(ThePlayer, fishPrice)
+    fishPrice = getPayRate(player, fishPrice)
+    fishingQuotes[player] = { count = fishCount, price = fishPrice, expires = getTickCount() + 60000 }
 
-    triggerClientEvent(ThePlayer, "fishing:SellFishGUI", ThePlayer, fishCount, fishPrice)
+    triggerClientEvent(player, "fishing:SellFishGUI", player, fishCount, fishPrice)
 end
 
-function sellTheFish(ThePlayer, price)
-    for i, v in ipairs(items:getItems(ThePlayer)) do
-        local ItemID, ItemValue = unpack(v)
-        if ItemID == fishItem then
-            items:takeItem(ThePlayer, fishItem)
+function sellTheFish()
+    local player = client
+    local quote = player and fishingQuotes[player]
+    if not player or not isElement(player) or getElementType(player) ~= "player"
+        or tonumber(getElementData(player, "loggedin")) ~= 1
+        or not quote or getTickCount() > quote.expires then
+        if player then fishingQuotes[player] = nil end
+        return false
+    end
+
+    local currentCount = items:countItems(player, fishItem)
+    if currentCount ~= quote.count or quote.count < 1 then
+        fishingQuotes[player] = nil
+        return false
+    end
+
+    fishingQuotes[player] = nil
+    for i = 1, quote.count do
+        if not items:takeItem(player, fishItem) then
+            return false
         end
     end
-    exports.global:sendLocalText(ThePlayer, "[English] Fisherman John says: Thanks for the fish, heres some cash!", 255, 255, 255, 10)
-    exports.global:giveMoney(ThePlayer, price)
+    exports.global:sendLocalText(player, "[English] Fisherman John says: Thanks for the fish, heres some cash!", 255, 255, 255, 10)
+    return exports.global:giveMoney(player, quote.price)
 end
 
 -- Commands and Events
