@@ -1,14 +1,22 @@
 mods = {}
 
 function showSpeedToAdmins(velocity)
-	kph = math.ceil(velocity * 1.609344)
-	exports.global:sendMessageToAdmins("[Possible Speedhack/HandlingHack] " .. getPlayerName(client) .. ": " .. velocity .. "Mph/".. kph .." Kph")
+	local player = client
+	velocity = tonumber(velocity)
+	if not player or not isElement(player) or getElementType(player) ~= "player"
+		or not velocity or velocity ~= velocity or velocity < 0 or velocity > 1000 then return false end
+	local kph = math.ceil(velocity * 1.609344)
+	exports.global:sendMessageToAdmins("[Possible Speedhack/HandlingHack] " .. getPlayerName(player) .. ": " .. velocity .. "Mph/".. kph .." Kph")
 end
 addEvent("alertAdminsOfSpeedHacks", true)
 addEventHandler("alertAdminsOfSpeedHacks", getRootElement(), showSpeedToAdmins)
 
 function showDMToAdmins(kills)
-	exports.global:sendMessageToAdmins("[Possible DeathMatching] " .. getPlayerName(client) .. ": " .. kills .. " kills in <=2 Minutes.")
+	local player = client
+	kills = tonumber(kills)
+	if not player or not isElement(player) or getElementType(player) ~= "player"
+		or not kills or kills ~= math.floor(kills) or kills < 0 or kills > 10000 then return false end
+	exports.global:sendMessageToAdmins("[Possible DeathMatching] " .. getPlayerName(player) .. ": " .. kills .. " kills in <=2 Minutes.")
 end
 addEvent("alertAdminsOfDM", true)
 addEventHandler("alertAdminsOfDM", getRootElement(), showDMToAdmins)
