@@ -112,9 +112,17 @@ function payBusDriver(line, stop)
 	end
 
 	if stop == 0 then
-		if driverProgress[player] or not isBusNearStop(vehicle, { points = { {1811, -1890, 13, true, 0} } }, 0) then
-			return false
+		local firstStop
+		for _, point in ipairs(g_bus_routes[line].points) do
+			if point[4] == true then
+				firstStop = tonumber(point[5])
+				if not isBusNearStop(vehicle, g_bus_routes[line], firstStop) then
+					return false
+				end
+				break
+			end
 		end
+		if driverProgress[player] or not firstStop or firstStop ~= 1 then return false end
 		driverProgress[player] = { line = line, lastStop = 0 }
 		removeDriver(player)
 		if drivers[line] and drivers[line][1] then
