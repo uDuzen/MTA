@@ -1,6 +1,13 @@
 mysql = exports.mysql
 integration = exports.integration
 
+local function isFactionMember(player, factionID)
+	if not isElement(player) or getElementType(player) ~= "player" then return false end
+	factionID = tonumber(factionID)
+	local factionData = getElementData(player, "faction")
+	return factionID and type(factionData) == "table" and factionData[factionID] ~= nil
+end
+
 -- EVENTS
 addEvent("onPlayerJoinFaction", false)
 addEventHandler("onPlayerJoinFaction", getRootElement(),
@@ -305,6 +312,9 @@ end
 
 -- // CALL BACKS FROM CLIENT GUI
 function loadFaction(factionID)
+	if not client or tonumber(getElementData(client, "loggedin")) ~= 1 then return false end
+	factionID = tonumber(factionID)
+	if not factionID or factionID < 1 or not isFactionMember(client, factionID) then return false end
 	local theTeam = exports.pool:getElement("team", factionID)
 	if (theTeam) then
 		local theTeam = exports.pool:getElement("team", factionID)
@@ -456,7 +466,13 @@ addEvent("faction:loadFaction", true)
 addEventHandler("faction:loadFaction", resourceRoot, loadFaction)
 
 function callbackRespawnVehicles(factionID)
+	factionID = tonumber(factionID)
+	if not client or not factionID or factionID < 1 or not isFactionMember(client, factionID)
+		or not hasMemberPermissionTo(client, factionID, "respawn_vehs") then
+		return false
+	end
 	local theTeam = getFactionFromID(factionID)
+	if not isElement(theTeam) then return false end
 	local factionCooldown = getElementData(theTeam, "cooldown")
 	if not hasMemberPermissionTo(client, factionID, "respawn_vehs") then
 		outputChatBox("Not allowed, sorry.", client)
@@ -504,8 +520,16 @@ function resetFactionCooldown(theTeam)
 end
 
 function callbackRespawnOneVehicle(vehicleID, factionID)
+	factionID = tonumber(factionID)
+	vehicleID = tonumber(vehicleID)
+	if not client or not factionID or factionID < 1 or not vehicleID or vehicleID < 1
+		or not isFactionMember(client, factionID)
+		or not hasMemberPermissionTo(client, factionID, "respawn_vehs") then
+		return false
+	end
 	local theTeam = getFactionFromID(factionID)
-	local theVehicle = exports.pool:getElement("vehicle", tonumber(vehicleID))
+	local theVehicle = exports.pool:getElement("vehicle", vehicleID)
+	if not isElement(theTeam) then return false end
 	if not hasMemberPermissionTo(client, factionID, "respawn_vehs") then
 		outputChatBox("Not allowed, sorry.", source, 255, 0, 0)
 		return
@@ -548,7 +572,11 @@ addEvent("cguiRespawnOneVehicle", true)
 addEventHandler("cguiRespawnOneVehicle", getRootElement(), callbackRespawnOneVehicle)
 
 function callbackUpdateMOTD(motd, factionID)
+	factionID = tonumber(factionID)
+	if not client or not factionID or factionID < 1 or type(motd) ~= "string" or #motd > 250
+		or not hasMemberPermissionTo(client, factionID, "edit_motd") then return false end
 	local theTeam = getFactionFromID(factionID)
+	if not isElement(theTeam) then return false end
 	if not hasMemberPermissionTo(client, factionID, "edit_motd") then
 		outputChatBox("Not allowed, sorry.", client)
 		return
@@ -568,7 +596,11 @@ addEvent("cguiUpdateMOTD", true)
 addEventHandler("cguiUpdateMOTD", getRootElement(), callbackUpdateMOTD)
 
 function callbackUpdateNote(note, factionID)
+	factionID = tonumber(factionID)
+	if not client or not factionID or factionID < 1 or type(note) ~= "string" or #note > 2000
+		or not hasMemberPermissionTo(client, factionID, "modify_factionl_note") then return false end
 	local theTeam = getFactionFromID(factionID)
+	if not isElement(theTeam) then return false end
 	if not hasMemberPermissionTo(client, factionID, "modify_factionl_note") or not note then
 		outputChatBox("Not allowed, sorry.", client)
 		return
@@ -588,7 +620,11 @@ addEvent("faction:note", true)
 addEventHandler("faction:note", getRootElement(), callbackUpdateNote)
 
 function callbackUpdateFNote(fnote, factionID)
+	factionID = tonumber(factionID)
+	if not client or not factionID or factionID < 1 or type(fnote) ~= "string" or #fnote > 2000
+		or not hasMemberPermissionTo(client, factionID, "modify_faction_note") then return false end
 	local theTeam = getFactionFromID(factionID)
+	if not isElement(theTeam) then return false end
 	if not hasMemberPermissionTo(client, factionID, "modify_faction_note") or not fnote then
 		outputChatBox("Not allowed, sorry.", client)
 		return
@@ -732,7 +768,14 @@ addEvent("cguiQuitFaction", true)
 addEventHandler("cguiQuitFaction", getRootElement(), callbackQuitFaction)
 
 function callbackInvitePlayer(invitedPlayer, factionID)
+	factionID = tonumber(factionID)
+	if not client or not factionID or factionID < 1 or not isFactionMember(client, factionID)
+		or not hasMemberPermissionTo(client, factionID, "add_member")
+		or not isElement(invitedPlayer) or getElementType(invitedPlayer) ~= "player" then
+		return false
+	end
 	local theTeam = getFactionFromID(factionID)
+	if not isElement(theTeam) then return false end
 	if getElementData(invitedPlayer, "loggedin") ~= 1 then
 		outputChatBox("Not allowed, sorry.", client)
 		return
