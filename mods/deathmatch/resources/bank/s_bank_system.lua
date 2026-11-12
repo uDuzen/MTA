@@ -117,6 +117,7 @@ function withdrawMoneyBusiness(amount, factionID)
 	end
 	
 	local theTeam = exports.factions:getFactionFromID(factionID)
+	if not isElement(theTeam) or getElementType(theTeam) ~= "team" then return false end
 	if exports.global:takeMoney(theTeam, amount) then
 		if exports.global:giveMoney(client, amount) then
 			mysql:query_free("INSERT INTO wiretransfers (`from`, `to`, `amount`, `reason`, `type`) VALUES (" .. mysql:escape_string(-getElementData(theTeam, "id")) .. ", " .. mysql:escape_string(getElementData(client, "dbid")) .. ", " .. mysql:escape_string(amount) .. ", '', 4)" ) 
@@ -139,8 +140,9 @@ function depositMoneyBusiness(amount, factionID)
 	if (state == 0) then
 		return
 	end
+	local theTeam = exports.factions:getFactionFromID(factionID)
+	if not isElement(theTeam) or getElementType(theTeam) ~= "team" then return false end
 	if exports.global:takeMoney(client, amount) then
-		local theTeam = exports.factions:getFactionFromID(factionID)
 		if exports.global:giveMoney(theTeam, amount) then
 			mysql:query_free("INSERT INTO wiretransfers (`from`, `to`, `amount`, `reason`, `type`) VALUES (" .. mysql:escape_string(getElementData(client, "dbid")) .. ", " .. mysql:escape_string(-getElementData(theTeam, "id")) .. ", " .. mysql:escape_string(amount) .. ", '', 5)" )
 			outputChatBox("You deposited $" .. exports.global:formatMoney(amount) .. " into your business account.", client, 255, 194, 14)
@@ -154,13 +156,11 @@ addEvent("depositMoneyBusiness", true)
 addEventHandler("depositMoneyBusiness", getRootElement(), depositMoneyBusiness)
 
 function transferMoneyToPersonal( fromFactionId, name, amount, reason )
-	if getElementData( client, "loggedin" ) == 1 then
-		-- validate and format amount.
-		if not amount or not tonumber(amount) or tonumber(amount) <=0 then
-			return not outputChatBox( "Invalid amount to transfer.", client, 255, 0, 0 )
-		else
-			amount = math.floor(tonumber(amount))
-		end
+	if not client or tonumber(getElementData(client, "loggedin")) ~= 1 then return false end
+	amount = validateBankAmount(amount)
+	if not amount then
+		return not outputChatBox( "Invalid amount to transfer.", client, 255, 0, 0 )
+	end
 		
 		-- validate and format reason
 		if not reason then
