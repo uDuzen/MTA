@@ -1,4 +1,5 @@
 local outboundPhoneNumber = "Hidden No."
+local npc911Cooldown = {}
 
 function promptGUI(thePlayer)
 	if exports.integration:isPlayerSupporter(thePlayer) or exports.integration:isPlayerTrialAdmin(thePlayer) then
@@ -8,6 +9,22 @@ end
 addCommandHandler("911", promptGUI)
 
 function doTheCall(thePlayer, location, message)
+	local caller = client
+	if not caller or not isElement(caller) or getElementType(caller) ~= "player"
+		or not (exports.integration:isPlayerSupporter(caller) or exports.integration:isPlayerTrialAdmin(caller))
+		or tonumber(getElementData(caller, "loggedin")) ~= 1
+		or type(location) ~= "string" or #location < 1 or #location > 100
+		or type(message) ~= "string" or #message < 1 or #message > 250 then
+		return false
+	end
+	local now = getTickCount()
+	if npc911Cooldown[caller] and now - npc911Cooldown[caller] < 15000 then
+		return false
+	end
+	npc911Cooldown[caller] = now
+	thePlayer = caller
+	location = location:gsub("[%c]", " ")
+	message = message:gsub("[%c]", " ")
 
 	local playerStack = { }
 
@@ -54,3 +71,4 @@ function doTheCall(thePlayer, location, message)
 end
 addEvent("npc911", true)
 addEventHandler("npc911", getResourceRootElement(), doTheCall)
+addEventHandler("onPlayerQuit", root, function() npc911Cooldown[source] = nil end)
