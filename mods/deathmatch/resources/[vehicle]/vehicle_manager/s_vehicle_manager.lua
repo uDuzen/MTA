@@ -271,12 +271,14 @@ function systemDeleteVehicle(vehid, reason) --This function is meant to be used 
 
 	-- Updated to use MTA's Native MySQL. Here is where the database stuff is processed.
 	local query = dbQuery(exports.mysql:getConn("mta"), "SELECT id FROM vehicles WHERE id=? LIMIT 1", vehid)
-	local veh = dbPoll(query, 1000)
-	
-	if veh and veh.id ~= mysql_null() then
-		dbExec(exports.mysql:getConn("mta"), "UPDATE vehicles SET deleted=-1, deletedDate=NOW() WHERE id=?", vehid)
-	else
-		return false, "veh does not existed in database."
+	if not query then return false, "database query could not be started." end
+	local rows = dbPoll(query, 1000)
+	local vehicleRow = type(rows) == "table" and rows[1] or nil
+	if not vehicleRow or tonumber(vehicleRow.id) ~= vehid then
+		return false, "vehicle does not exist in database."
+	end
+	if not dbExec(exports.mysql:getConn("mta"), "UPDATE vehicles SET deleted=-1, deletedDate=NOW() WHERE id=?", vehid) then
+		return false, "vehicle could not be marked as deleted."
 	end
 
 	--Alright, it's time to give admins some clues of what just happened
