@@ -201,78 +201,90 @@ end
 addEvent("insurance:sell", true)
 addEventHandler("insurance:sell", root, sellPremium) -- yeah so source can be player
 
-function clientSideOutputChatBox(element, string)
-	if isElement(element) then
-		outputChatBox(string, element)
-	end
+function clientSideOutputChatBox(element, message)
+	local player = client
+	local sale = player and pendingInsuranceSales[player]
+	if not sale or sale.salesman ~= element or sale.expires < getTickCount()
+		or type(message) ~= "string" or #message > 200 then return false end
+	if isElement(element) then outputChatBox(message, element) end
+	pendingInsuranceSales[player] = nil
+	return true
 end
 addEvent("insurance:outputchatbox", true)
 addEventHandler("insurance:outputchatbox", resourceRoot, clientSideOutputChatBox)
 
 function finalizePurchase(salesman, customer, carid, protection, premium, factionid)
-	if isElement(customer) and carid and protection and premium and factionid then
-		local theVehicle = exports.pool:getElement("vehicle", tonumber(carid))
-		if theVehicle then
-			carid = tonumber(carid)
-			exports.anticheat:setEld(theVehicle, "insurance:fee", tonumber(premium))
-			exports.anticheat:setEld(theVehicle, "insurance:faction", tonumber(factionid))
-			local realTime = getRealTime()
-			local date = string.format("%04d/%02d/%02d", realTime.year + 1900, realTime.month + 1, realTime.monthday )
-			local q = exports.mysql:query("INSERT INTO `insurance_data` (`customername`, `vehicleid`, `protection`, `deductible`, `date`, `claims`, `cashout`, `premium`, `insurancefaction`) VALUES ('"..string.gsub(getPlayerName(customer), "_", " ").."', '"..exports.mysql:escape_string(tonumber(carid)).."', '"..exports.mysql:escape_string(protection).."', '0', '"..date.."', '0', '0', '"..exports.mysql:escape_string(tonumber(premium)).."', '"..exports.mysql:escape_string(tonumber(factionid)).."')")
-			local newid = mysql:insert_id( )
-			mysql:free_result(q)
-
-			datatable[carid] = {}
-			datatable[carid]["policyid"] = newid
-			datatable[carid]["customername"] = string.gsub(getPlayerName(customer), "_", " ")
-			datatable[carid]["vehicleid"] = tonumber(carid)
-			datatable[carid]["protection"] = protection
-			datatable[carid]["deductible"] = 0
-			datatable[carid]["date"] = date
-			datatable[carid]["claims"] = 0
-			datatable[carid]["cashout"] = 0
-			datatable[carid]["premium"] = tonumber(premium)
-			datatable[carid]["insurancefaction"] = tonumber(factionid)
-
-			outputChatBox("You have accepted the insurance plan. It is valid as of now. To cancel, please contact the company.", customer)
-			outputChatBox("The customer has accepted the insurance plan.", salesman) --sec didn't actually fix anything.
-
-			updateClientCache(salesman, {datatable, factionstable}) -- Why don't you put those outputchatbox here, so it can notify actualy result.
-		end
+	local buyer = client
+	local sale = buyer and pendingInsuranceSales[buyer]
+	carid = tonumber(carid)
+	premium = tonumber(premium)
+	factionid = tonumber(factionid)
+	if not buyer or not isElement(buyer) or tonumber(getElementData(buyer, "loggedin")) ~= 1
+		or not sale or sale.expires < getTickCount()
+		or sale.salesman ~= salesman or sale.vehicleID ~= carid
+		or sale.protection ~= protection or sale.premium ~= premium
+		or sale.factionID ~= factionid or not isElement(salesman)
+		or getCurrentInsuranceFaction(salesman) ~= factionid then
+		return false
 	end
+	local theVehicle = exports.pool:getElement("vehicle", carid)
+	local buyerID = tonumber(getElementData(buyer, "dbid"))
+	if not isElement(theVehicle) or not buyerID
+		or tonumber(getElementData(theVehicle, "owner")) ~= buyerID or datatable[carid] then
+		return false
+	end
+	local realTime = getRealTime()
+	local date = string.format("%04d/%02d/%02d", realTime.year + 1900, realTime.month + 1, realTime.monthday)
+	local customerName = string.gsub(getPlayerName(buyer), "_", " ")
+	local q = mysql:query("INSERT INTO `insurance_data` (`customername`, `vehicleid`, `protection`, `deductible`, `date`, `claims`, `cashout`, `premium`, `insurancefaction`) VALUES ('"
+		..mysql:escape_string(customerName).."', "..carid..", '"..mysql:escape_string(protection).."', 0, '"
+		..date.."', 0, 0, "..premium..", "..factionid..")")
+	if not q then return false end
+	local newid = mysql:insert_id()
+	mysql:free_result(q)
+	if not newid then return false end
+	exports.anticheat:setEld(theVehicle, "insurance:fee", premium)
+	exports.anticheat:setEld(theVehicle, "insurance:faction", factionid)
+	datatable[carid] = {
+		policyid = newid, customername = customerName, vehicleid = carid,
+		protection = protection, deductible = 0, date = date,
+		claims = 0, cashout = 0, premium = premium, insurancefaction = factionid
+	}
+	pendingInsuranceSales[buyer] = nil
+	outputChatBox("You have accepted the insurance plan. It is valid as of now. To cancel, please contact the company.", buyer)
+	outputChatBox("The customer has accepted the insurance plan.", salesman)
+	updateClientCache(salesman, {datatable, factionstable})
+	updateClientCache(buyer, {datatable, factionstable})
+	return true
 end
 addEvent("insurance:finalpurchase", true)
 addEventHandler("insurance:finalpurchase", root, finalizePurchase)
 
-function cancelPolicy(vehicleID, thePlayer) -- why don't you put it a localplayer, but resourceroot, cuz clearly localplayer is the one that clicked the GUI
-	if vehicleID then
-		if not client then client = thePlayer end
-		vehicleID = tonumber(vehicleID)
-		if datatable[vehicleID] then --check if this vehicle is insured
-			if tonumber(datatable[vehicleID]["vehicleid"]) == vehicleID then
-				local policyid = datatable[vehicleID]["policyid"]
-				--local success = exports.mysql:query_free("UPDATE `owl_mta`.`vehicles` SET `insurancefee`='0', `insurancefaction`='0' WHERE `id`='"..exports.mysql:escape_string(tonumber(vehicleID)).."'")
-				local success = true
-				local success2 = exports.mysql:query_free("DELETE FROM `insurance_data` WHERE `policyid`='"..exports.mysql:escape_string(policyid).."'")
-				local theVehicle = exports.pool:getElement("vehicle", tonumber(vehicleID))
-				local success3 = false
-				if theVehicle then
-					exports.anticheat:setEld(theVehicle, "insurance:fee", 0)
-					exports.anticheat:setEld(theVehicle, "insurance:faction", 0)
-					success3 = true
-				end
-				datatable[vehicleID] = nil
-				updateClientCache(source, {datatable, factionstable})
-
-				--outputChatBox("SYSTEM... [database2]="..tostring(success2).." | [policy number]="..tostring(success3), client)
-				if success and success2 and success3 and client then
-					outputChatBox("Insurance policy #"..policyid.." has been cancelled.", client)
-					return true
-				end
-			end
-		end
+function cancelPolicy(vehicleID)
+	local player = client
+	vehicleID = tonumber(vehicleID)
+	if not player or not isElement(player) or tonumber(getElementData(player, "loggedin")) ~= 1
+		or not vehicleID or vehicleID < 1 or vehicleID ~= math.floor(vehicleID) then return false end
+	local policy = datatable[vehicleID]
+	if not policy or tonumber(policy.vehicleid) ~= vehicleID then return false end
+	local theVehicle = exports.pool:getElement("vehicle", vehicleID)
+	local ownerID = theVehicle and tonumber(getElementData(theVehicle, "owner"))
+	local playerID = tonumber(getElementData(player, "dbid"))
+	local canCancel = playerID and ownerID == playerID
+	if not canCancel then canCancel = isInsuranceManager(player, tonumber(policy.insurancefaction)) end
+	if not canCancel then return false end
+	local policyID = tonumber(policy.policyid)
+	if not policyID or not mysql:query_free("DELETE FROM `insurance_data` WHERE `policyid`="..policyID.." AND `vehicleid`="..vehicleID) then
+		return false
 	end
-	return false
+	if isElement(theVehicle) then
+		exports.anticheat:setEld(theVehicle, "insurance:fee", 0)
+		exports.anticheat:setEld(theVehicle, "insurance:faction", 0)
+	end
+	datatable[vehicleID] = nil
+	updateClientCache(player, {datatable, factionstable})
+	outputChatBox("Insurance policy #"..policyID.." has been cancelled.", player)
+	return true
 end
 addEvent("insurance:cancel", true)
 addEventHandler("insurance:cancel", root, cancelPolicy)
@@ -370,20 +382,24 @@ end
 	. vehs : a list of veh ids that the insurance faction takes fees from
 ]]
 
-function paynsprayClaims(vehicleid, amount) -- this is triggered everytime an insured vehicle goes into the paynspray
-	if not vehicleid or not amount then return false end
+function paynsprayClaims(vehicleid, amount)
 	amount = tonumber(amount)
 	vehicleid = tonumber(vehicleid)
-
-	if datatable[vehicleid] then
-		local newClaimsTotal = tonumber(datatable[vehicleid]["claims"]) + amount
-		datatable[vehicleid]["claims"] = newClaimsTotal
-		local r = mysql:query_free("UPDATE `insurance_data` SET `claims`="..mysql:escape_string(newClaimsTotal).." WHERE `vehicleid`="..vehicleid)
-
-		updateClientCache(source, {datatable, factionstable})
+	if not amount or amount < 0 or amount > 1000000 or amount ~= amount
+		or not vehicleid or vehicleid < 1 or vehicleid ~= math.floor(vehicleid) then return false end
+	local policy = datatable[vehicleid]
+	if not policy then return false end
+	local newClaimsTotal = (tonumber(policy.claims) or 0) + amount
+	if not dbExec(mysql:getConn("mta"), "UPDATE `insurance_data` SET `claims`=? WHERE `vehicleid`=?", newClaimsTotal, vehicleid) then
+		return false
 	end
+	policy.claims = newClaimsTotal
+	for _, player in ipairs(getElementsByType("player")) do
+		updateClientCache(player, {datatable, factionstable})
+	end
+	return true
 end
-addEvent("insurance:claims", true)
+addEvent("insurance:claims", false)
 addEventHandler("insurance:claims", root, paynsprayClaims)
 
 function sqlSaveDatatable() -- this is triggered when resource stops and every 5 hours
