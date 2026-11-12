@@ -442,8 +442,11 @@ function updateMetadata(element, slot, key, value)
 				return false, "no metadata " .. tostring(key)
 			elseif def.type == "string" and type(value) ~= "string" then
 				return false, "metadata type mismatch #1"
-			elseif def.type == "integer" and type(value) ~= "number" then
+			elseif def.type == "integer" and (type(value) ~= "number" or value ~= value
+				or value == math.huge or value == -math.huge or value ~= math.floor(value)) then
 				return false, "metadata type mismatch #2"
+			elseif def.type == "string" and #value > 1024 then
+				return false, "metadata value is too long"
 			elseif def.type == "table" and type(value) ~= "table" then
 				return false, "metadata type mismatch #3"
 			elseif def.type ~= "string" and def.type ~= "integer" and def.type ~= "table" then
@@ -473,13 +476,19 @@ function updateMetadata(element, slot, key, value)
 			end
 
 			local itemIndex = item[3]
+			local updated
+			if metadata == nil then
+				updated = dbExec( exports.mysql:getConn('mta'), "UPDATE items SET metadata=NULL WHERE `index`=? ", itemIndex )
+			else
+				local encodedMetadata = toJSON(metadata)
+				if not encodedMetadata or #encodedMetadata > 8192 then
+					return false, "metadata is invalid or too large"
+				end
+				updated = dbExec( exports.mysql:getConn('mta'), "UPDATE items SET metadata=? WHERE `index`=? ", encodedMetadata, itemIndex )
+			end
+			if not updated then return false, "metadata could not be saved" end
 			saveditems[element][slot][5] = metadata
 			notify( element )
-			if metadata == nil then
-				dbExec( exports.mysql:getConn('mta'), "UPDATE items SET metadata=NULL WHERE `index`=? ", itemIndex )
-			else
-				dbExec( exports.mysql:getConn('mta'), "UPDATE items SET metadata=? WHERE `index`=? ", toJSON(metadata), itemIndex )
-			end
 			return true
 		else
 			return false, "Slot does not exist."
