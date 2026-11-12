@@ -35,6 +35,11 @@ function giveCatch()
         or not items:hasItem(player, 49, 1) then
         return false
     end
+    local contactElement = getPedContactElement(player)
+    if not isElement(contactElement) or getElementType(contactElement) ~= "vehicle"
+        or getVehicleType(contactElement) ~= "Boat" then
+        return false
+    end
     local now = getTickCount()
     if fishingCooldowns[player] and now < fishingCooldowns[player] then
         return false
