@@ -100,7 +100,7 @@ local function subscribeChanges( element )
 	subscribers[ element ][ source ] = true
 end
 
-addEvent( "subscribeToInventoryChanges", true )
+addEvent( "subscribeToInventoryChanges", false )
 addEventHandler( "subscribeToInventoryChanges", getRootElement(), subscribeChanges )
 
 -- Send items without subscription
@@ -108,7 +108,7 @@ local function sendCurrentInventory( element )
 	sendItems( element, source )
 end
 
-addEvent( "sendCurrentInventory", true )
+addEvent( "sendCurrentInventory", false )
 addEventHandler( "sendCurrentInventory", getRootElement(), sendCurrentInventory )
 
 -- remove from inventory changes list
@@ -117,8 +117,8 @@ local function unsubscribeChanges( element )
 	triggerClientEvent( source, "recieveItems", element )
 end
 
-addEvent( "unsubscribeFromInventoryChanges", true )
-addEventHandler( "unsubscribeFromInventoryChanges", getRootElement(), subscribeChanges )
+addEvent( "unsubscribeFromInventoryChanges", false )
+addEventHandler( "unsubscribeFromInventoryChanges", getRootElement(), unsubscribeChanges )
 
 -- returns the 'owner' column content
 local function getID(element)
