@@ -79,90 +79,132 @@ function roleplaySupervise(thePlayer)
 end
 addCommandHandler("supervise", roleplaySupervise)
 
+local reconSessions = {}
+
 addEvent("recon:reattach", true)
-addEventHandler("recon:reattach", resourceRoot, function(target, int, dim)
-	setElementInterior(client, int)
-	setElementDimension(client, dim)
-	setCameraInterior(client, int)
-	local x,y,z = getElementPosition(target)
-	setElementPosition(client, x, y, z-5)
-	attachElements(client, target, 0, 0, -5)
+addEventHandler("recon:reattach", resourceRoot, function(target)
+	local player = client
+	local session = player and reconSessions[player]
+	if not player or not exports.integration:isPlayerTrialAdmin(player)
+		or not session or not isElement(target) or getElementType(target) ~= "player"
+		or target ~= session.target then
+		return false
+	end
+	local int = getElementInterior(target)
+	local dim = getElementDimension(target)
+	local x, y, z = getElementPosition(target)
+	setElementInterior(player, int)
+	setElementDimension(player, dim)
+	setCameraInterior(player, int)
+	setElementPosition(player, x, y, z - 5)
+	attachElements(player, target, 0, 0, -5)
+	return true
 end)
 
 -- MAXIME's reworks
 function asyncReconActivate(cur)
-	local target = exports.pool:getElement("player", cur.target)
-	if not target then
-		triggerClientEvent(source, "admin:recon", source)
-		return
+	local player = client
+	if not player or not isElement(player) or getElementType(player) ~= "player"
+		or not exports.integration:isPlayerTrialAdmin(player)
+		or tonumber(getElementData(player, "loggedin")) ~= 1
+		or type(cur) ~= "table" then
+		return false
 	end
-	removePedFromVehicle(source)
-	if exports.freecam:isEnabled(source) then
-		triggerEvent("freecam:asyncDeactivateFreecam", source)
+	local targetID = tonumber(cur.target)
+	if not targetID or targetID < 1 or targetID ~= math.floor(targetID) then return false end
+	local target = exports.pool:getElement("player", targetID)
+	if not isElement(target) or getElementType(target) ~= "player"
+		or target == player or tonumber(getElementData(target, "loggedin")) ~= 1
+		or reconSessions[player] then
+		return false
 	end
 
-	-- Set important element data
-	setElementData(source, "reconx", target, true)
-	setElementData(source, "recontp", true)
+	local x, y, z = getElementPosition(player)
+	local rx, ry, rz = getElementRotation(player)
+	reconSessions[player] = {
+		x = x, y = y, z = z, rx = rx, ry = ry, rz = rz,
+		dim = getElementDimension(player), int = getElementInterior(player),
+		target = target
+	}
 
-	setElementCollisionsEnabled ( source, false )
-	triggerEvent('artifacts:removeAllOnPlayer', root, source)
-	setElementAlpha(source, 0)
-	setPedWeaponSlot(source, 0)
+	if exports.freecam:isEnabled(player) then
+		triggerEvent("freecam:asyncDeactivateFreecam", player)
+	end
+	setElementData(player, "reconx", target, true)
+	setElementData(player, "recontp", true)
+	setElementCollisionsEnabled(player, false)
+	triggerEvent("artifacts:removeAllOnPlayer", root, player)
+	setElementAlpha(player, 0)
+	setPedWeaponSlot(player, 0)
 
 	local t_int = getElementInterior(target)
 	local t_dim = getElementDimension(target)
-
-	setElementDimension(source, t_dim)
-	setElementInterior(source, t_int)
-	setCameraInterior(source, t_int)
-
-	local x1, y1, z1 = getElementPosition(target)
-	setElementPosition(source, x1, y1, 0)
-
-	setTimer(function(source, xl, yl, zl, target) setElementPosition(source, x1, y1, z1-5); 	attachElements(source, target, 0, 0, -5) end, 500, 1, source, xl, yl, zl, target)
-
-	setCameraTarget(source,target)
-	exports.logs:dbLog(source, 4, target, "RECON")
-	local hiddenAdmin = getElementData(source, "hiddenadmin")
-	if hiddenAdmin == 0 and not (exports.integration:isPlayerSeniorAdmin(source) and exports.integration:isPlayerTrialAdmin(target) and not exports.integration:isPlayerAdmin(target))  then
-		local adminTitle = exports.global:getPlayerAdminTitle(source)
-		exports.global:sendMessageToAdmins("AdmCmd: " .. tostring(adminTitle) .. " " .. getElementData(source, "account:username") .. " started reconning " .. getPlayerName(target):gsub("_", " ") .. " (" .. getElementData(target, "account:username") .. ").")
-	elseif exports.integration:isPlayerSeniorAdmin(source) and exports.integration:isPlayerTrialAdmin(target) and not exports.integration:isPlayerAdmin(target) and hiddenAdmin == 0 then
-		local adminTitle = exports.global:getPlayerAdminTitle(source)
-		exports.global:sendMessageToSeniorAdmins("SeniorAdmCmd: " .. tostring(adminTitle) .. " " .. getElementData(source, "account:username") .. " started reconning " .. getElementData(target, "account:username") .. ".")
+	setElementDimension(player, t_dim)
+	setElementInterior(player, t_int)
+	setCameraInterior(player, t_int)
+	local tx, ty, tz = getElementPosition(target)
+	setElementPosition(player, tx, ty, tz - 5)
+	setTimer(function(admin, targetPlayer)
+		if isElement(admin) and isElement(targetPlayer) and reconSessions[admin] then
+			local px, py, pz = getElementPosition(targetPlayer)
+			setElementPosition(admin, px, py, pz - 5)
+			attachElements(admin, targetPlayer, 0, 0, -5)
+		end
+	end, 500, 1, player, target)
+	setCameraTarget(player, target)
+	exports.logs:dbLog(player, 4, target, "RECON")
+	local hiddenAdmin = getElementData(player, "hiddenadmin")
+	if hiddenAdmin == 0 and not (exports.integration:isPlayerSeniorAdmin(player) and exports.integration:isPlayerTrialAdmin(target) and not exports.integration:isPlayerAdmin(target)) then
+		local adminTitle = exports.global:getPlayerAdminTitle(player)
+		exports.global:sendMessageToAdmins("AdmCmd: " .. tostring(adminTitle) .. " " .. getElementData(player, "account:username") .. " started reconning " .. getPlayerName(target):gsub("_", " ") .. " (" .. getElementData(target, "account:username") .. ").")
+	elseif exports.integration:isPlayerSeniorAdmin(player) and exports.integration:isPlayerTrialAdmin(target) and not exports.integration:isPlayerAdmin(target) and hiddenAdmin == 0 then
+		local adminTitle = exports.global:getPlayerAdminTitle(player)
+		exports.global:sendMessageToSeniorAdmins("SeniorAdmCmd: " .. tostring(adminTitle) .. " " .. getElementData(player, "account:username") .. " started reconning " .. getElementData(target, "account:username") .. ".")
 	end
+	return true
 end
 addEvent("admin:recon:async:activate", true)
 addEventHandler("admin:recon:async:activate", root, asyncReconActivate)
 
-function asyncReconDeactivate(cur)
-	if exports.freecam:isEnabled(source) then
-		triggerEvent("freecam:asyncDeactivateFreecam", source)
+function asyncReconDeactivate()
+	local player = client
+	if not player or not isElement(player) or not exports.integration:isPlayerTrialAdmin(player) then return false end
+	local session = reconSessions[player]
+	if not session then return false end
+	reconSessions[player] = nil
+
+	if exports.freecam:isEnabled(player) then
+		triggerEvent("freecam:asyncDeactivateFreecam", player)
 	end
-	setElementData(source, "reconx", false, true)
-	removeElementData(source, "recontp")
-
-	removePedFromVehicle(source)
-	detachElements(source)
-
-	setElementPosition(source, cur.x, cur.y, cur.z)
-	setElementRotation(source, cur.rx, cur.ry, cur.rz)
-
-	setElementDimension(source, cur.dim)
-	setElementInterior(source, cur.int)
-	setCameraInterior(source,cur.int)
-
-	setCameraTarget(source, nil)
-	setElementAlpha(source, 255)
-	setElementCollisionsEnabled ( source, true )
+	setElementData(player, "reconx", false, true)
+	removeElementData(player, "recontp")
+	removePedFromVehicle(player)
+	detachElements(player)
+	setElementPosition(player, session.x, session.y, session.z)
+	setElementRotation(player, session.rx, session.ry, session.rz)
+	setElementDimension(player, session.dim)
+	setElementInterior(player, session.int)
+	setCameraInterior(player, session.int)
+	setCameraTarget(player, nil)
+	setElementAlpha(player, 255)
+	setElementCollisionsEnabled(player, true)
+	return true
 end
 addEvent("admin:recon:async:deactivate", true)
 addEventHandler("admin:recon:async:deactivate", root, asyncReconDeactivate)
 
 
 addEvent("admin:disabledisappear", true)
-addEventHandler("admin:disabledisappear", root, function (thePlayer)
-	exports.anticheat:changeProtectedElementDataEx(thePlayer, "reconx", false, false)
-	exports.anticheat:changeProtectedElementDataEx(thePlayer, "invisible", false, false)		
+addEventHandler("admin:disabledisappear", root, function()
+	local player = client
+	if not player or not (exports.integration:isPlayerTrialAdmin(player) or exports.integration:isPlayerSupporter(player)) then
+		return false
+	end
+	exports.anticheat:changeProtectedElementDataEx(player, "reconx", false, false)
+	exports.anticheat:changeProtectedElementDataEx(player, "invisible", false, false)
+	return true
+end)
+
+addEventHandler("onPlayerQuit", root, function()
+	reconSessions[source] = nil
 end)
