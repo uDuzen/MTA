@@ -1,4 +1,7 @@
 local function canAccessElement( player, element )
+	if not isElement(player) or getElementType(player) ~= "player" or not isElement(element) then
+		return false
+	end
 	if isPedDead ( player ) then
 		return false
 	end
@@ -32,6 +35,8 @@ end
 --
 
 local function openInventory( element, ax, ay )
+	if not client or not isElement(element) then return false end
+	local source = client
 	if canAccessElement( source, element ) then
 		triggerEvent( "subscribeToInventoryChanges", source, element )
 		triggerClientEvent( source, "openElementInventory", element, ax, ay )
@@ -44,6 +49,8 @@ addEventHandler( "openFreakinInventory", getRootElement(), openInventory )
 --
 
 local function closeInventory( element )
+	if not client or not isElement(element) then return false end
+	local source = client
 	triggerEvent( "unsubscribeFromInventoryChanges", source, element )
 end
 
@@ -96,6 +103,8 @@ function x_output_wrapper( ... ) return output( ... ) end
 
 
 local function moveToElement( element, slot, ammo, event )
+	if not client or not isElement(element) then return false end
+	local source = client
 	if not canAccessElement( source, element ) then
 		outputChatBox("You cannot access this inventory at the moment.", source, 255, 0, 0)
 		triggerClientEvent( source, event or "finishItemMove", source )
@@ -387,6 +396,8 @@ addEventHandler( "moveToElement", getRootElement(), moveToElement )
 --
 
 local function moveWorldItemToElement( item, element )
+	if not client then return false end
+	local source = client
 	if false then
 		return outputDebugString("[ITEM] moveWorldItemToElement / Disabled ")
 	end
@@ -487,6 +498,8 @@ addEventHandler( "moveWorldItemToElement", getRootElement(), moveWorldItemToElem
 --
 
 local function moveFromElement( element, slot, ammo, index )
+	if not client or not isElement(element) then return false end
+	local source = client
 	if false then
 		return outputDebugString("[ITEM] moveFromElement / Disabled ")
 	end
