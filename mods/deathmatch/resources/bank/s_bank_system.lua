@@ -36,7 +36,9 @@ addEventHandler( "onResourceStart", getResourceRootElement(),
 )
 
 function showGeneralServiceGUI(atm, ped)
+	if not client or tonumber(getElementData(client, "loggedin")) ~= 1 then return false end
 	local factions = getElementData(client, "faction")
+	if type(factions) ~= "table" then return false end
 
 	local fTable = {}	
 	for k,v in pairs(factions) do
@@ -156,7 +158,9 @@ addEvent("depositMoneyBusiness", true)
 addEventHandler("depositMoneyBusiness", getRootElement(), depositMoneyBusiness)
 
 function transferMoneyToPersonal( fromFactionId, name, amount, reason )
-	if not client or tonumber(getElementData(client, "loggedin")) ~= 1 then return false end
+	if not client or tonumber(getElementData(client, "loggedin")) ~= 1
+		or type(name) ~= "string" or #name < 1 or #name > 64 then return false end
+	if reason ~= nil and (type(reason) ~= "string" or #reason > 128) then return false end
 	amount = validateBankAmount(amount)
 	if not amount then
 		return not outputChatBox( "Invalid amount to transfer.", client, 255, 0, 0 )
