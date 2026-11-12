@@ -36,11 +36,11 @@ addEventHandler("fetchTickets", getRootElement(), function()
 		if #tickets > 0 then
 			local quotes = {
 				"I'm not very computer savvy, please be patient.",
-				"My name is Emma, how may I help you " .. (getElementData(source, "gender") == 1 and "ma'am" or "sir") .. "?",
+				"My name is Emma, how may I help you " .. (getElementData(player, "gender") == 1 and "ma'am" or "sir") .. "?",
 				"You have " .. #tickets .. " unpaid ticket" .. (#tickets > 1 and "s" or "") .. ", would you like to pay " .. (#tickets == 1 and "it" or "them") .. "?"
 			}
 			outputChatBox(" [English] " .. pedname .. " says: " .. quotes[math.random(1, 3)], source, 255, 255, 255)
-			triggerClientEvent(source, "showPayGUI", source, tickets)
+			triggerClientEvent(player, "showPayGUI", player, tickets)
 		else
 			outputChatBox(" [English] " .. pedname .. " says: Sorry. You have no unpaid tickets on record.", source, 255, 255, 255)
 		end
