@@ -10,7 +10,11 @@
 local mysql = exports.mysql
 local staffTitles = exports.integration:getStaffTitles()
 function getStaffInfo(username, error)
-	local thePlayer = source
+	local thePlayer = client or source
+	if not isElement(thePlayer) or not exports.integration:isPlayerSeniorAdmin(thePlayer)
+		or type(username) ~= "string" or #username < 1 or #username > 64 then
+		return false
+	end
 	local error1 = error
 	dbQuery(function(qh, username, error, source)
 		local result = dbPoll(qh, 0)
@@ -38,7 +42,10 @@ addEvent("staff:getStaffInfo", true)
 addEventHandler("staff:getStaffInfo", root, getStaffInfo)
 
 function getTeamsData()
-	local thePlayer = source
+	local thePlayer = client or source
+	if not isElement(thePlayer) or not exports.integration:isPlayerSeniorAdmin(thePlayer) then
+		return false
+	end
 	staffTitles = exports.integration:getStaffTitles()
 	local users = {}
 	dbQuery(
@@ -97,6 +104,10 @@ addEvent("staff:getTeamsData", true)
 addEventHandler("staff:getTeamsData", root, getTeamsData)
 
 function getChangelogs()
+	local thePlayer = client or source
+	if not isElement(thePlayer) or not exports.integration:isPlayerSeniorAdmin(thePlayer) then
+		return false
+	end
 	local changelogs = {}
 	local mQuery1 = nil
 	mQuery1 = mysql:query("SELECT (CASE WHEN to_rank>from_rank THEN 1 ELSE 0 END) AS promoted, s.id, s.userid, team, from_rank, to_rank, s.`by` AS `by`, details, DATE_FORMAT(date,'%b %d, %Y %h:%i %p') AS date FROM staff_changelogs s ORDER BY id DESC")
@@ -108,14 +119,40 @@ function getChangelogs()
 		table.insert(changelogs, row )
 	end
 	mysql:free_result(mQuery1)
-	triggerClientEvent(source, "openStaffManager", source, nil, nil, changelogs )
+	triggerClientEvent(thePlayer, "openStaffManager", thePlayer, nil, nil, changelogs )
 end
 addEvent("staff:getChangelogs", true)
 addEventHandler("staff:getChangelogs", root, getChangelogs)
 
 function editStaff(userid, ranks, details)
+	local thePlayer = client
+	if not thePlayer or not isElement(thePlayer) or type(ranks) ~= "table"
+		or (not exports.integration:isPlayerSeniorAdmin(thePlayer)
+			and not exports.integration:isPlayerVehicleConsultant(thePlayer)
+			and not exports.integration:isPlayerLeadScripter(thePlayer)
+			and not exports.integration:isPlayerMappingTeamLeader(thePlayer)) then
+		return false
+	end
+	if details ~= nil and (type(details) ~= "string" or #details > 500) then return false end
+	local allowedTeams = {
+		[1] = exports.integration:isPlayerSeniorAdmin(thePlayer),
+		[2] = exports.integration:isPlayerSeniorAdmin(thePlayer),
+		[3] = exports.integration:isPlayerSeniorAdmin(thePlayer) or exports.integration:isPlayerVehicleConsultant(thePlayer),
+		[4] = exports.integration:isPlayerSeniorAdmin(thePlayer) or exports.integration:isPlayerLeadScripter(thePlayer),
+		[5] = exports.integration:isPlayerSeniorAdmin(thePlayer) or exports.integration:isPlayerMappingTeamLeader(thePlayer),
+		[6] = exports.integration:isPlayerSeniorAdmin(thePlayer)
+	}
+	for teamID, rankValue in pairs(ranks) do
+		local team = tonumber(teamID)
+		local rank = tonumber(rankValue)
+		if not team or team < 1 or team > 6 or team ~= math.floor(team)
+			or not allowedTeams[team] or not rank or rank < 0 or rank > 20 or rank ~= math.floor(rank) then
+			return false
+		end
+		ranks[team] = rank
+	end
 	local error = nil
-	if not userid or not tonumber(userid) then
+	if not userid or not tonumber(userid) or tonumber(userid) < 1 or tonumber(userid) ~= math.floor(tonumber(userid)) then
 		outputChatBox("Internal Error!", source, 255, 0, 0)
 		return false
 	else
@@ -129,7 +166,6 @@ function editStaff(userid, ranks, details)
 		end
 	end
 	staffTitles = exports.integration:getStaffTitles()
-	local thePlayer = source
 	dbQuery(function(qh, userid, staffTitles, target, userid, ranks, details, thePlayer)
 		local result = dbPoll(qh, 0)
 		if result then
