@@ -43,7 +43,7 @@ function getStaffInfo(username, error)
 			staffInfo.error = error1
 			triggerClientEvent(thePlayer, "openStaffManager", thePlayer, staffInfo)
 		end
-	end, {username, error, source}, exports.mysql:getConn("core"), "SELECT id, username, admin, supporter, vct, scripter, mapper, fmt FROM accounts WHERE username=?", username)
+	end, {username, error, thePlayer}, exports.mysql:getConn("core"), "SELECT id, username, admin, supporter, vct, scripter, mapper, fmt FROM accounts WHERE username=?", username)
 end
 addEvent("staff:getStaffInfo", true)
 addEventHandler("staff:getStaffInfo", root, getStaffInfo)
@@ -156,7 +156,7 @@ function editStaff(userid, ranks, details)
 	end
 	local error = nil
 	if not userid or not tonumber(userid) or tonumber(userid) < 1 or tonumber(userid) ~= math.floor(tonumber(userid)) then
-		outputChatBox("Internal Error!", source, 255, 0, 0)
+		outputChatBox("Internal Error!", thePlayer, 255, 0, 0)
 		return false
 	else
 		userid = tonumber(userid)
