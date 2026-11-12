@@ -30,7 +30,7 @@ addEventHandler("sweeper:start", root, function(routeIndex)
 	local vehicle
 	if valid then valid, vehicle = isSweeper(player) end
 	routeIndex = tonumber(routeIndex)
-	if not valid or not routeIndex or routeIndex ~= math.floor(routeIndex)
+	if not valid or activeSweeperJobs[player] or not routeIndex or routeIndex ~= math.floor(routeIndex)
 		or not routePositions[routeIndex] or not nearPoint(player, {1480.6318, 2372.4980, 10.8203}, 35) then
 		return false
 	end
@@ -46,7 +46,7 @@ addEventHandler("sweeper:setRoute", root, function(routeIndex)
 	local vehicle
 	if valid then valid, vehicle = isSweeper(player) end
 	routeIndex = tonumber(routeIndex)
-	if not job or not valid or vehicle ~= job.vehicle or not routeIndex
+	if not job or job.route ~= nil or not valid or vehicle ~= job.vehicle or not routeIndex
 		or routeIndex ~= math.floor(routeIndex) or not routePositions[routeIndex] then return false end
 	job.route = routeIndex
 	return true
@@ -79,6 +79,7 @@ addEventHandler("sweeper:finish", root, function()
 	activeSweeperJobs[player] = nil
 	exports.global:giveMoney(player, wage)
 	outputChatBox("You earned $" .. wage .. " on your trucking runs.", player, 255, 194, 15)
+	removePedFromVehicle(player)
 	respawnVehicle(vehicle)
 	setVehicleLocked(vehicle, false)
 	return true
@@ -86,4 +87,21 @@ end)
 
 addEventHandler("onPlayerQuit", root, function()
 	activeSweeperJobs[source] = nil
+end)
+
+addEvent("sweeper:cancel", true)
+addEventHandler("sweeper:cancel", root, function()
+	local player = client
+	local job = activeSweeperJobs[player]
+	if not job then return false end
+	local valid = validPlayer(player)
+	if not valid then return false end
+	activeSweeperJobs[player] = nil
+	local vehicle = getPedOccupiedVehicle(player)
+	if isElement(vehicle) and getElementModel(vehicle) == 574 then
+		removePedFromVehicle(player)
+		respawnVehicle(vehicle)
+		setVehicleLocked(vehicle, false)
+	end
+	return true
 end)
