@@ -133,14 +133,15 @@ function getFactionRanks(factionID, inOrder)
 		local ranks = {}	-- Ranks Table
 		local added = {}	-- Record of Added Ranks
 		local theTeam = getFactionFromID(factionID)
+		if not isElement(theTeam) then return ranks end
 
 		-- Start with Ranks in DB Storage
 		local rankOrder = getElementData(theTeam, "rank_order") or ""
 		rankOrder = split(rankOrder, ",")
-			-- Add Ranks in Table
-		for i,rankID in ipairs(rankOrder) do
-			rankID = tonumber(rankID)
-			if (getRankFaction(rankID) == factionID) then
+		-- Add each valid rank once, in the configured order.
+		for _, rankValue in ipairs(rankOrder) do
+			local rankID = tonumber(rankValue)
+			if rankID and not added[rankID] and getRankFaction(rankID) == factionID then
 				table.insert(ranks, rankID)
 				added[rankID] = true
 			end
@@ -235,16 +236,14 @@ end
 --------------->>
 
 function getPlayerFactionRank(thePlayer, factionID)
-	if (not thePlayer or not isElement(thePlayer) or getElementType(thePlayer) ~= "player") then return false end
+	if not thePlayer or not isElement(thePlayer) or getElementType(thePlayer) ~= "player" then return false end
+	factionID = tonumber(factionID)
+	if not factionID then return false end
 	local faction = getElementData(thePlayer, "faction")
-	for i,v in pairs(faction) do
-		if i == factionID then
-			rankID = tonumber(v.rank)
-			return rankID
-		else
-			return false	
-		end	
-	end	
+	if type(faction) ~= "table" then return false end
+	local factionInfo = faction[factionID]
+	if type(factionInfo) ~= "table" then return false end
+	return tonumber(factionInfo.rank) or false
 end
 
 --------------------
