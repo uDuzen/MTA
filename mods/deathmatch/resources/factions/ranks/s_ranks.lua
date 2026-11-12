@@ -30,7 +30,7 @@ function getRankInfo(factionID, player)
 	triggerClientEvent(targetPlayer, "faction-system.setRankInfo", resourceRoot, ranks, rank_perms, permissions, wages)
 	return true
 end
-, true)
+addEvent("faction-system.getRankInfo", true)
 addEventHandler("faction-system.getRankInfo", root, getRankInfo)
 
 -- Add Faction Rank
@@ -447,8 +447,11 @@ function sortFactionRanks(factionID, ranks, theTeam)
 end
 
 function cacheOnPlayerSpawn()
+	local thePlayer = source
 	setTimer(function()
-		triggerClientEvent(source, "faction-system.cacheRanks", resourceRoot, FactionRanks)
+		if isElement(thePlayer) then
+			triggerClientEvent(thePlayer, "faction-system.cacheRanks", resourceRoot, FactionRanks)
+		end
 	end, 1000, 1)
 end
 addEventHandler("accounts:character:select", root, cacheOnPlayerSpawn)
