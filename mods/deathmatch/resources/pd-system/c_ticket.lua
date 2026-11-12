@@ -56,7 +56,7 @@ addEventHandler("showPayGUI", getRootElement(), function(tickets)
 					if getElementData(localPlayer, "bankmoney") >= tonumber(tickets[row][3]:sub(2, string.find(tickets[row][3], " "))) then
 						guiSetProperty(GUIEditor.button[5], "Disabled", "False")
 					else
-						guiSetProperty(GUIEditor.button[4], "Disabled", "True")
+						guiSetProperty(GUIEditor.button[5], "Disabled", "True")
 					end
 				else
 					guiSetProperty(GUIEditor.button[4], "Disabled", "True")
@@ -80,7 +80,7 @@ addEventHandler("showPayGUI", getRootElement(), function(tickets)
 							outputChatBox("You do not have enough money to pay by bank.", 255, 0, 0)
 							return false
 						end
-						triggerServerEvent("chargePlayer", localPlayer, toPay, 2, tickets[row][1])
+						triggerServerEvent("chargePlayer", localPlayer, toPay, 2, tickets[row][1], getShortTime(tickets[row][4]))
 						triggerServerEvent("sendAmeClient", localPlayer, "takes their ATM card from their pocket and slips it into the machine.")
 					end
 					guiGridListRemoveRow(GUIEditor.gridlist[1], row-1)
