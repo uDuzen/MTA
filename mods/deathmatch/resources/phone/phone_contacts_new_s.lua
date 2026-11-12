@@ -2,7 +2,16 @@
 
 addEvent("phone:addContact", true)
 function addPhoneContact(name, number, phoneBookPhone)
-	if (client) then
+	if client then
+		phoneBookPhone = tonumber(phoneBookPhone)
+		if not isElement(client) or tonumber(getElementData(client, "loggedin")) ~= 1
+			or not phoneBookPhone or phoneBookPhone < 10000 or phoneBookPhone ~= math.floor(phoneBookPhone)
+			or type(name) ~= "string" or #name < 1 or #name > 50
+			or (type(number) ~= "string" and type(number) ~= "number")
+			or not tostring(number):match("^%d%d%d%d%d%d?%d?%d?%d?%d?%d?%d?%d?%d?$") then
+			triggerClientEvent(client, "phone:addContactResponse", client, false)
+			return false
+		end
 		if not phoneBookPhone then
 			triggerClientEvent(client, "phone:addContactResponse", client, false)
 			return
