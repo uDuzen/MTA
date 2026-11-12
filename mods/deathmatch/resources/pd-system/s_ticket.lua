@@ -73,6 +73,13 @@ addEventHandler("givePlayerTicket", getRootElement(), function(player, fine, off
 		or type(offences) ~= "string" or #offences > 100 then
 		return false
 	end
+	local ox, oy, oz = getElementPosition(officerPlayer)
+	local px, py, pz = getElementPosition(player)
+	if getElementDimension(officerPlayer) ~= getElementDimension(player)
+		or getElementInterior(officerPlayer) ~= getElementInterior(player)
+		or getDistanceBetweenPoints3D(ox, oy, oz, px, py, pz) > 10 then
+		return false
+	end
 
 	local charid = tonumber(getElementData(officerPlayer, "dbid")) or 0
 	local targetCharacterID = tonumber(getElementData(player, "dbid"))
