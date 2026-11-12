@@ -32,14 +32,14 @@ function serviceVehicle(veh)
 			return false
 		end
 		local mechcost = 110
-		if getMechanicDiscount(source) > 1 then
-			mechcost = mechcost / getMechanicDiscount(source)
+		if getMechanicDiscount(player) > 1 then
+			mechcost = mechcost / getMechanicDiscount(player)
 		end
-		if not (exports.global:hasMoney(source, mechcost) or exports.integration:isPlayerTrialAdmin(source, true)) then
-			outputChatBox("You can't afford the parts to service this vehicle.", source, 255, 0, 0)
+		if not (exports.global:hasMoney(player, mechcost) or exports.integration:isPlayerTrialAdmin(player, true)) then
+			outputChatBox("You can't afford the parts to service this vehicle.", player, 255, 0, 0)
 		else
-			if not exports.integration:isPlayerTrialAdmin(source, true) then 
-				exports.global:takeMoney(source, mechcost)
+			if not exports.integration:isPlayerTrialAdmin(player, true) then 
+				exports.global:takeMoney(player, mechcost)
 			end
 
 			local health = getElementHealth(veh)
@@ -59,8 +59,8 @@ function serviceVehicle(veh)
 					setVehicleDamageProof(veh, false)
 				end
 			end
-			exports.global:sendLocalMeAction(source, "services the vehicle, patching it up a bit.")
-			exports.logs:dbLog(source, 31, {  veh }, "REPAIR QUICK-SERVICE")
+			exports.global:sendLocalMeAction(player, "services the vehicle, patching it up a bit.")
+			exports.logs:dbLog(player, 31, {  veh }, "REPAIR QUICK-SERVICE")
 		end
 end
 addEvent("serviceVehicle", true)
@@ -71,15 +71,15 @@ function changeTyre( veh, wheelNumber )
 	wheelNumber = tonumber(wheelNumber)
 	if not validMechanicVehicle(player, veh) or not wheelNumber or wheelNumber ~= math.floor(wheelNumber) or wheelNumber < 1 or wheelNumber > 4 then return false end
 		local mechcost = 10
-		if getMechanicDiscount(source) > 1 then
-			mechcost = mechcost / getMechanicDiscount(source)
+		if getMechanicDiscount(player) > 1 then
+			mechcost = mechcost / getMechanicDiscount(player)
 		end
-		if not exports.global:hasMoney(source, mechcost) then
-			outputChatBox("You can't afford the parts to change this vehicle's tyres.", source, 255, 0, 0)
+		if not exports.global:hasMoney(player, mechcost) then
+			outputChatBox("You can't afford the parts to change this vehicle's tyres.", player, 255, 0, 0)
 		else
 			local wheel1, wheel2, wheel3, wheel4 = getVehicleWheelStates( veh )
 			if not wheel1 then return false end
-			exports.global:takeMoney(source, mechcost)
+			exports.global:takeMoney(player, mechcost)
 
 			if (wheelNumber==1) then -- front left
 				outputDebugString("Tyre 1 changed.")
@@ -95,8 +95,8 @@ function changeTyre( veh, wheelNumber )
 				setVehicleWheelStates ( veh, wheel1, wheel2, wheel3, 0 )
 			end
 
-			exports.logs:dbLog(source, 31, {  veh }, "REPAIR TIRESWAP")
-			exports.global:sendLocalMeAction(source, "replaces the vehicle's tyre.")
+			exports.logs:dbLog(player, 31, {  veh }, "REPAIR TIRESWAP")
+			exports.global:sendLocalMeAction(player, "replaces the vehicle's tyre.")
 		end
 end
 addEvent("tyreChange", true)
@@ -107,23 +107,23 @@ function changePaintjob( veh, paintjob )
 	paintjob = tonumber(paintjob)
 	if not validMechanicVehicle(player, veh) or not paintjob or paintjob ~= math.floor(paintjob) or paintjob < 0 or paintjob > 3 then return false end
 		local mechcost = 7500
-		if (getElementData(source,"faction")[4]) then
+		if (getElementData(player,"faction")[4]) then
 			mechcost = mechcost / btrdiscountratio
 		end
-		if not exports.global:takeMoney(source, mechcost) then
-			outputChatBox("You can't afford to repaint this vehicle.", source, 255, 0, 0)
+		if not exports.global:takeMoney(player, mechcost) then
+			outputChatBox("You can't afford to repaint this vehicle.", player, 255, 0, 0)
 		else
-			triggerEvent( "paintjobEndPreview", source, veh )
+			triggerEvent( "paintjobEndPreview", player, veh )
 			if setVehiclePaintjob( veh, paintjob ) then
 				local col1, col2 = getVehicleColor( veh )
 				if col1 == 0 or col2 == 0 then
 					setVehicleColor( veh, 1, 1, 1, 1 )
 				end
-				exports.global:sendLocalMeAction(source, "repaints the vehicle.")
-				exports.logs:dbLog(source, 6, {  veh }, "MODDING PAINTJOB ".. paintjob)
+				exports.global:sendLocalMeAction(player, "repaints the vehicle.")
+				exports.logs:dbLog(player, 6, {  veh }, "MODDING PAINTJOB ".. paintjob)
 				exports.vehicle:saveVehicleMods(veh)
 			else
-				outputChatBox("This car already has this paintjob.", source, 255, 0, 0)
+				outputChatBox("This car already has this paintjob.", player, 255, 0, 0)
 			end
 		end
 end
@@ -135,23 +135,23 @@ function editVehicleHeadlights( veh, color1, color2, color3 )
 	color1, color2, color3 = tonumber(color1), tonumber(color2), tonumber(color3)
 	if not validMechanicVehicle(player, veh) or not validRGB(color1) or not validRGB(color2) or not validRGB(color3) then return false end
 		local mechcost = 1250
-		if (getElementData(source,"faction")[4]) then
+		if (getElementData(player,"faction")[4]) then
 			mechcost = mechcost / btrdiscountratio
 		end
-		if not (exports.global:hasMoney(source, mechcost) or exports.integration:isPlayerTrialAdmin(source, true)) then
-			outputChatBox("You can't afford to mod this vehicle.", source, 255, 0, 0)
+		if not (exports.global:hasMoney(player, mechcost) or exports.integration:isPlayerTrialAdmin(player, true)) then
+			outputChatBox("You can't afford to mod this vehicle.", player, 255, 0, 0)
 		else
-			triggerEvent( "headlightEndPreview", source, veh )
+			triggerEvent( "headlightEndPreview", player, veh )
 			if setVehicleHeadLightColor ( veh, color1, color2, color3) then
-				if not exports.integration:isPlayerTrialAdmin(source, true) then 
-					exports.global:takeMoney(source, mechcost)
+				if not exports.integration:isPlayerTrialAdmin(player, true) then 
+					exports.global:takeMoney(player, mechcost)
 				end
-				exports.global:sendLocalMeAction(source, "replaces the vehicles headlights.")
+				exports.global:sendLocalMeAction(player, "replaces the vehicles headlights.")
 				exports.anticheat:changeProtectedElementDataEx(veh, "headlightcolors", {color1, color2, color3}, true)
 				exports.vehicle:saveVehicleMods(veh)
-				exports.logs:dbLog(source, 6, {  veh }, "MODDING HEADLIGHT ".. color1 .. " "..color2.." "..color3)
+				exports.logs:dbLog(player, 6, {  veh }, "MODDING HEADLIGHT ".. color1 .. " "..color2.." "..color3)
 			else
-				outputChatBox("This car already has this headlights.", source, 255, 0, 0)
+				outputChatBox("This car already has this headlights.", player, 255, 0, 0)
 			end
 		end
 end
@@ -167,39 +167,39 @@ function changeVehicleUpgrade( veh, upgrade )
 		local item = false
 		local u = upgrades[upgrade - 999]
 		if not u then
-			outputDebugString( getPlayerName( source ) .. " tried to add invalid upgrade #" .. upgrade )
+			outputDebugString( getPlayerName( player ) .. " tried to add invalid upgrade #" .. upgrade )
 			return
 		end
-		name = u[1]
+		local name = u[1]
 		local mechcost = u[2]
-		if (getElementData(source,"faction")[4]) then
+		if (getElementData(player,"faction")[4]) then
 			mechcost = mechcost / btrdiscountratio
 		end
-		if exports.global:hasItem( source, 114, upgrade ) then
+		if exports.global:hasItem( player, 114, upgrade ) then
 			mechcost = 0
 			item = true
 		end
 
-		if not item and not exports.global:hasMoney( source, mechcost ) then
-			outputChatBox("You can't afford to add " .. name .. " to this vehicle.", source, 255, 0, 0)
+		if not item and not exports.global:hasMoney( player, mechcost ) then
+			outputChatBox("You can't afford to add " .. name .. " to this vehicle.", player, 255, 0, 0)
 		else
 			for i = 0, 16 do
 				if upgrade == getVehicleUpgradeOnSlot( veh, i ) then
-					outputChatBox("This car already has this upgrade.", source, 255, 0, 0)
+					outputChatBox("This car already has this upgrade.", player, 255, 0, 0)
 					return
 				end
 			end
 			if addVehicleUpgrade( veh, upgrade ) then
 				if item then
-					exports.global:takeItem(source, 114, upgrade)
+					exports.global:takeItem(player, 114, upgrade)
 				else
-					exports.global:takeMoney(source, mechcost)
+					exports.global:takeMoney(player, mechcost)
 				end
-				exports.global:sendLocalMeAction(source, "added " .. name .. " to the vehicle.")
+				exports.global:sendLocalMeAction(player, "added " .. name .. " to the vehicle.")
 				exports.vehicle:saveVehicleMods(veh)
-				exports.logs:dbLog(source, 6, {  veh }, "MODDING ADDUPGRADE "..name)
+				exports.logs:dbLog(player, 6, {  veh }, "MODDING ADDUPGRADE "..name)
 			else
-				outputChatBox("Failed to apply the car upgrade.", source, 255, 0, 0)
+				outputChatBox("Failed to apply the car upgrade.", player, 255, 0, 0)
 			end
 		end
 end
@@ -210,11 +210,11 @@ function changeVehicleColour(veh, col1, col2, col3, col4)
 	local player = client
 	if not validMechanicVehicle(player, veh) then return false end
 		local mechcost = 100
-		if (getElementData(source,"faction")[4]) then
+		if (getElementData(player,"faction")[4]) then
 			mechcost = mechcost / btrdiscountratio
 		end
-		if not (exports.global:hasMoney(source, mechcost) or exports.integration:isPlayerTrialAdmin(source, true)) then
-			outputChatBox("You can't afford to repaint this vehicle.", source, 255, 0, 0)
+		if not (exports.global:hasMoney(player, mechcost) or exports.integration:isPlayerTrialAdmin(player, true)) then
+			outputChatBox("You can't afford to repaint this vehicle.", player, 255, 0, 0)
 		else
 			col = { getVehicleColor( veh, true ) }
 
@@ -229,18 +229,18 @@ function changeVehicleColour(veh, col1, col2, col3, col4)
 				end
 			end
 
-			--outputChatBox("1. "..toJSON(color1), source)
-			--outputChatBox("2. "..toJSON(color2), source)
-			--outputChatBox("3. "..toJSON(color3), source)
-			--outputChatBox("4. "..toJSON(color4), source)
+			--outputChatBox("1. "..toJSON(color1), player)
+			--outputChatBox("2. "..toJSON(color2), player)
+			--outputChatBox("3. "..toJSON(color3), player)
+			--outputChatBox("4. "..toJSON(color4), player)
 
 			if setVehicleColor( veh, color1[1], color1[2], color1[3], color2[1], color2[2], color2[3],  color3[1], color3[2], color3[3], color4[1], color4[2], color4[3]) then
-				if not exports.integration:isPlayerTrialAdmin(source, true) then 
-					exports.global:takeMoney(source, mechcost) 
+				if not exports.integration:isPlayerTrialAdmin(player, true) then 
+					exports.global:takeMoney(player, mechcost) 
 				end
-				exports.global:sendLocalMeAction(source, "repaints the vehicle.")
+				exports.global:sendLocalMeAction(player, "repaints the vehicle.")
 				exports.vehicle:saveVehicleMods(veh)
-				exports.logs:dbLog(source, 6, {  veh }, "MODDING REPAINT "..toJSON(col))
+				exports.logs:dbLog(player, 6, {  veh }, "MODDING REPAINT "..toJSON(col))
 			end
 		end
 end
