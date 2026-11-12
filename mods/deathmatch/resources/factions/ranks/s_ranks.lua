@@ -108,7 +108,7 @@ function addFactionRank(FactionID, rankName, permissions, plr)
 	if rankOrder then
 		local newOrder = rankOrder..","..rankID
 		exports.anticheat:setEld(theTeam, "rank_order", newOrder, 'all') 
-		dbExec(exports.mysql:getConn("mta"), "UPDATE `factions` SET `rank_order` = '"..newOrder.."' WHERE `id` = "..FactionID)
+		dbExec(exports.mysql:getConn("mta"), "UPDATE `factions` SET `rank_order` = ? WHERE `id` = ?", newOrder, FactionID)
 	end
 	exports.anticheat:setEld(theTeam, "ranks", factionRanks, 'all')
 	triggerClientEvent("faction-system.cacheRanks", client, FactionRanks)
