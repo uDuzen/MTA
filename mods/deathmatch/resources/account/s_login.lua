@@ -2,22 +2,18 @@ local mysql = exports.mysql
 --local salt = "wedorp"
 
 function clientReady()
-	local thePlayer = source
-	local resources = getResources()
-	local missingResources = false
-	for key, value in ipairs(resources) do
-		local resourceName = getResourceName(value)
-		if resourceName == "global" or resourceName == "mysql" or resourceName == "pool" then
-			if getResourceState(value) == "loaded" or getResourceState(value) == "stopping" or getResourceState(value) == "failed to load" then
-				missingResources = true
-				outputChatBox("The server is missing dependent resource '"..getResourceName(value).."'.", thePlayer, 255, 0, 0)
-				outputChatBox("Please try again shortly.", thePlayer, 255, 0, 0)
-				outputChatBox("       - The Owl Gaming Administration Team", thePlayer, 255, 0, 0)
-				break
-			end
+	if not client or not isElement(client) or getElementType(client) ~= "player" then return false end
+	local thePlayer = client
+	local requiredResources = { "global", "mysql", "pool" }
+	for _, resourceName in ipairs(requiredResources) do
+		local dependency = getResourceFromName(resourceName)
+		if not dependency or getResourceState(dependency) ~= "running" then
+			outputChatBox("The server is missing or has not started dependent resource '"..resourceName.."'.", thePlayer, 255, 0, 0)
+			outputChatBox("Please try again shortly.", thePlayer, 255, 0, 0)
+			outputChatBox("       - The Owl Gaming Administration Team", thePlayer, 255, 0, 0)
+			return false
 		end
 	end
-	if missingResources then return end
 	local willPlayerBeBanned = false
 	local bannedIPs = exports.global:fetchIPs()
 	local playerIP = getPlayerIP(thePlayer)
@@ -54,6 +50,7 @@ addEventHandler("onJoin", getRootElement(), clientReady)
 
 addEventHandler("accounts:login:request", getRootElement(),
 	function ()
+		if not client or not isElement(client) or getElementType(client) ~= "player" then return false end
 		local seamless = getElementData(client, "account:seamless:validated")
 		if seamless == true then
 
