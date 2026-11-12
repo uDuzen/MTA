@@ -1159,7 +1159,7 @@ function addDuty(dutyItems, finalLocations, dutyNewSkins, name, factionID, dutyI
 		refreshClient("> " .. getPlayerName(client):gsub("_", " ") .. ": Added duty '" .. name .. "'.", factionID, false)
 		exports.logs:dbLog(client, 35, "fa" .. tostring(factionID), "Added duty " .. name .. " Database ID #" .. index)
 	else
-		mysql:query_free("UPDATE duty_custom SET name='" .. mysql:escape_string(name) .. "', skins='" .. mysql:escape_string(toJSON(dutyNewSkins)) .. "', locations='" .. mysql:escape_string(toJSON(finalLocations)) .. "', items='" .. mysql:escape_string(toJSON(dutyItems)) .. "' WHERE id=" .. dutyID)
+		mysql:query_free("UPDATE duty_custom SET name='" .. mysql:escape_string(name) .. "', skins='" .. mysql:escape_string(toJSON(dutyNewSkins)) .. "', locations='" .. mysql:escape_string(toJSON(finalLocations)) .. "', items='" .. mysql:escape_string(toJSON(dutyItems)) .. "' WHERE id=" .. dutyID .. " AND factionID=" .. factionID)
 
 		table.remove(custom[tonumber(factionID)], dutyID)
 		custom[tonumber(factionID)][dutyID] = { dutyID, name, dutyNewSkins, finalLocations, dutyItems }
@@ -1205,7 +1205,7 @@ function addLocation(x, y, z, r, i, d, name, factionID, index)
 			refreshClient("> " .. getPlayerName(client):gsub("_", " ") .. ": Added location '" .. name .. "'.", factionID, false)
 			exports.logs:dbLog(client, 35, "fa" .. tostring(factionID), "Added location, Name:" .. name .. " Database ID:" .. newIndex .. " x:" .. x .. " y:" .. y .. " z:" .. z .. " radius:" .. r .. " interior:" .. i .. " dimension:" .. d)
 			else
-				mysql:query_free("UPDATE duty_locations SET name='" .. mysql:escape_string(name) .. "', x=" .. mysql:escape_string(x) .. ", y=" .. mysql:escape_string(y) .. ", z=" .. mysql:escape_string(z) .. ", radius=" .. mysql:escape_string(r) .. ", dimension=" .. mysql:escape_string(d) .. ", interior=" .. mysql:escape_string(i) .. " WHERE id=" .. index)
+				mysql:query_free("UPDATE duty_locations SET name='" .. mysql:escape_string(name) .. "', x=" .. mysql:escape_string(x) .. ", y=" .. mysql:escape_string(y) .. ", z=" .. mysql:escape_string(z) .. ", radius=" .. mysql:escape_string(r) .. ", dimension=" .. mysql:escape_string(d) .. ", interior=" .. mysql:escape_string(i) .. " WHERE id=" .. index .. " AND factionID=" .. factionID)
 				table.remove(locations[factionID], index)
 				exports.duty:destroyDutyColShape(factionID, index)
 				exports.duty:createDutyColShape(x, y, z, r, i, d, factionID, index)
