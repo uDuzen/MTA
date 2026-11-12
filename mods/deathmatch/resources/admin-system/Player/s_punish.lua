@@ -325,5 +325,5 @@ function checkExpiration(thePlayer, accountID)
 		return false
 	end
 end
-addEvent("points:checkexpiration", true)
+addEvent("points:checkexpiration", false)
 addEventHandler("points:checkexpiration", root, checkExpiration)
