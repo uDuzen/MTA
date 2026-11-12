@@ -559,7 +559,7 @@ function Characters_onCharacterChange()
     removeElementData(client, "jail_time_online")
     removeElementData(client, "jail:timer")]]
     setElementData(client, "dispatch:onDuty", false)
-    triggerClientEvent("dispatch:onDutyChange", root, false, client)
+    triggerClientEvent(root, "dispatch:onDutyChange", root, false, client)
     removeElementData(client, "enableGunAttach")
     triggerEvent("destroyWepObjects", client)
     triggerEvent("cards:leave_session", client)
