@@ -48,7 +48,7 @@ addEventHandler( "onPlayerQuit", getRootElement(), removeDriverOnAllLines )
 addEventHandler("onCharacterLogin", getRootElement(), removeDriverOnAllLines )
 
 function doPay(client)
-	local hours = tonumber(getElementData(client, "hoursplayed"))
+	local hours = tonumber(getElementData(client, "hoursplayed")) or 0
 	local rate = 50
 	local hoursrate = math.floor(hours*(rate*0.03))
 
@@ -159,14 +159,21 @@ function triggerBusCheatDetection(thePlayer,stop)
 end
 
 function busAdNextStop(line, stop)
-	local seat = getPedOccupiedVehicleSeat(source)
-	if not seat or seat ~= 0 then
-		return
+	local player = client
+	if not player or not isElement(player) or getElementType(player) ~= "player"
+		or tonumber(getElementData(player, "loggedin")) ~= 1
+		or tonumber(getElementData(player, "job")) ~= 3 then return false end
+	line, stop = tonumber(line), tonumber(stop)
+	if not line or line ~= math.floor(line) or not g_bus_routes[line]
+		or not stop or stop ~= math.floor(stop) then return false end
+	local vehicle = getPedOccupiedVehicle(player)
+	if not isElement(vehicle) or not busModels[getElementModel(vehicle)]
+		or getVehicleController(vehicle) ~= player then return false end
+	local routeStops = g_bus_routes[line].stops
+	if stop >= 1 and stop < #routeStops then
+		exports.hud:sendBottomNotification(player, "Bus Operator", "Current Stop: [".. routeStops[stop] .. "]     Next Stop: [".. routeStops[stop+1] .. "] ")
 	end
-
-	if(stop<#g_bus_routes[line].stops)then
-		exports.hud:sendBottomNotification(source, "Bus Operator", "Current Stop: [".. g_bus_routes[line].stops[stop] .. "]     Next Stop: [".. g_bus_routes[line].stops[stop+1] .. "] ")
-	end
+	return true
 end
 addEvent("busAdNextStop",true)
 addEventHandler("busAdNextStop", getRootElement(), busAdNextStop)
