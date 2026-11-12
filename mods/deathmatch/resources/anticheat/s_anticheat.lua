@@ -33,10 +33,11 @@ function scanMoneyHacks()
 		if (logged==1) then
 			if not (exports.integration:isPlayerTrialAdmin(value)) then -- Only check if its not an admin...
 
-				local money = getPlayerMoney(value)
-				local truemoney = exports.global:getMoney(value)
-				if (money) then
-					if (money > truemoney) then
+				local money = tonumber(getPlayerMoney(value))
+				local truemoney = tonumber(exports.global:getMoney(value))
+				if money and truemoney and money == money and truemoney == truemoney
+					and money ~= math.huge and truemoney ~= math.huge then
+					if money > truemoney then
 						counter = counter + 1
 						hackers[counter] = value
 						hackersMoney[counter] = (money-truemoney)
