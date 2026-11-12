@@ -91,8 +91,8 @@ function depositMoneyPersonal(amount)
 		return
 	end
 	if exports.global:takeMoney(client, amount, nil, true) then
-			local money = getElementData(client, "bankmoney")
-			setElementDataEx(client, "bankmoney", money+amount, true)
+			local money = tonumber(getElementData(client, "bankmoney")) or 0
+			setElementDataEx(client, "bankmoney", money + amount, true)
 			saveBank(client)
 			mysql:query_free("INSERT INTO wiretransfers (`from`, `to`, `amount`, `reason`, `type`) VALUES (0, " .. mysql:escape_string(getElementData(client, "dbid")) .. ", " .. mysql:escape_string(amount) .. ", '', 1)" )
 			outputChatBox("You deposited $" .. exports.global:formatMoney(amount) .. " into your personal account.", client, 255, 194, 14)
@@ -170,10 +170,16 @@ function transferMoneyToPersonal( fromFactionId, name, amount, reason )
 		local sender = nil
 		-- sending from faction bank.
 		if fromFactionId then
-			sender = exports.pool:getElement( 'team', fromFactionId )
-			if not sender then 
+			local factionID = tonumber(fromFactionId)
+			if not factionID or factionID < 1
+				or not exports.factions:hasMemberPermissionTo(client, factionID, "manage_finance") then
+				return false
+			end
+			sender = exports.factions:getFactionFromID(factionID)
+			if not isElement(sender) or getElementType(sender) ~= "team" then
 				return not outputChatBox( "Transaction failed. Error Code: 147", client, 255, 0, 0 )
 			end
+			fromFactionId = factionID
 		-- sending from personal bank.
 		else
 			sender = client
