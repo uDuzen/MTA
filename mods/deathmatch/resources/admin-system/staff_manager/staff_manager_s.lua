@@ -9,9 +9,16 @@
 
 local mysql = exports.mysql
 local staffTitles = exports.integration:getStaffTitles()
+
+local function canManageStaff(player)
+	return isElement(player) and (exports.integration:isPlayerSeniorAdmin(player)
+		or exports.integration:isPlayerVehicleConsultant(player)
+		or exports.integration:isPlayerLeadScripter(player)
+		or exports.integration:isPlayerMappingTeamLeader(player))
+end
 function getStaffInfo(username, error)
 	local thePlayer = client or source
-	if not isElement(thePlayer) or not exports.integration:isPlayerSeniorAdmin(thePlayer)
+	if not canManageStaff(thePlayer)
 		or type(username) ~= "string" or #username < 1 or #username > 64 then
 		return false
 	end
@@ -43,7 +50,7 @@ addEventHandler("staff:getStaffInfo", root, getStaffInfo)
 
 function getTeamsData()
 	local thePlayer = client or source
-	if not isElement(thePlayer) or not exports.integration:isPlayerSeniorAdmin(thePlayer) then
+	if not canManageStaff(thePlayer) then
 		return false
 	end
 	staffTitles = exports.integration:getStaffTitles()
@@ -126,11 +133,7 @@ addEventHandler("staff:getChangelogs", root, getChangelogs)
 
 function editStaff(userid, ranks, details)
 	local thePlayer = client
-	if not thePlayer or not isElement(thePlayer) or type(ranks) ~= "table"
-		or (not exports.integration:isPlayerSeniorAdmin(thePlayer)
-			and not exports.integration:isPlayerVehicleConsultant(thePlayer)
-			and not exports.integration:isPlayerLeadScripter(thePlayer)
-			and not exports.integration:isPlayerMappingTeamLeader(thePlayer)) then
+	if not canManageStaff(thePlayer) or type(ranks) ~= "table" then
 		return false
 	end
 	if details ~= nil and (type(details) ~= "string" or #details > 500) then return false end
