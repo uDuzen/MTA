@@ -546,7 +546,10 @@ function givePlayerGun(thePlayer, commandName, targetPlayer, ...)
 end
 addCommandHandler("makegun", givePlayerGun, false, false)
 addEvent("onMakeGun", true)
-addEventHandler("onMakeGun", getRootElement(), givePlayerGun)
+addEventHandler("onMakeGun", getRootElement(), function(_, commandName, targetPlayer, ...)
+	if not client then return false end
+	return givePlayerGun(client, commandName, targetPlayer, ...)
+end)
 
 -- /makeammo
 function givePlayerGunAmmo( thePlayer, commandName, targetPlayer, weap_id, rounds )
@@ -721,7 +724,24 @@ local allowedFactions = {
 }
 	
 function makeGenericItemCargo(thePlayer, admin, genericType, price, quantity, name, model, scale, texURL, texName)
-	local itemID = (tonumber(genericType) == 1 and 80) or (tonumber(genericType) == 2 and 89) or (tonumber(genericType) == 3 and 95) or false
+	if not isElement(thePlayer) or getElementType(thePlayer) ~= "player" then return false end
+	admin = exports.integration:isPlayerAdmin(thePlayer)
+	genericType = tonumber(genericType)
+	price = tonumber(price)
+	quantity = tonumber(quantity)
+	model = tonumber(model)
+	scale = tonumber(scale) or 1
+	if not genericType or genericType < 1 or genericType > 3 or genericType ~= math.floor(genericType)
+		or not price or price < 0 or price > 1000000 or price ~= math.floor(price)
+		or not quantity or quantity < 1 or quantity > 20 or quantity ~= math.floor(quantity)
+		or type(name) ~= "string" or #name < 1 or #name > 64
+		or not model or model < 1 or model > 20000 or model ~= math.floor(model)
+		or scale ~= scale or scale < 0.1 or scale > 10 then
+		return false
+	end
+	if texURL ~= nil and (type(texURL) ~= "string" or #texURL > 512) then return false end
+	if texName ~= nil and (type(texName) ~= "string" or #texName > 64) then return false end
+	local itemID = (genericType == 1 and 80) or (genericType == 2 and 89) or (genericType == 3 and 95) or false
 	
 	-- faction checks
 	local factionID, isLeader = false, false
@@ -783,7 +803,10 @@ function makeGenericItemCargo(thePlayer, admin, genericType, price, quantity, na
 	end
 end
 addEvent("createCargoGeneric", true)
-addEventHandler("createCargoGeneric", getResourceRootElement(), makeGenericItemCargo)
+addEventHandler("createCargoGeneric", getResourceRootElement(), function(_, admin, genericType, price, quantity, name, model, scale, texURL, texName)
+	if not client then return false end
+	return makeGenericItemCargo(client, admin, genericType, price, quantity, name, model, scale, texURL, texName)
+end)
 
 -- /TAKEITEM
 function takePlayerItem(thePlayer, commandName, targetPlayer, itemID, ...)
@@ -825,7 +848,10 @@ function takePlayerItem(thePlayer, commandName, targetPlayer, itemID, ...)
     end
 end
 addEvent("admin-system:takeItem", true)
-addEventHandler("admin-system:takeItem", getRootElement(), takePlayerItem)
+addEventHandler("admin-system:takeItem", getRootElement(), function(_, commandName, targetPlayer, itemID, ...)
+	if not client then return false end
+	return takePlayerItem(client, commandName, targetPlayer, itemID, ...)
+end)
 addCommandHandler("takeitem", takePlayerItem, false, false)
 addCommandHandler("delplayeritem", takePlayerItem, false, false)
 
@@ -1389,7 +1415,10 @@ function freezePlayer(thePlayer, commandName, target)
 end
 addCommandHandler("freeze", freezePlayer, false, false)
 addEvent("remoteFreezePlayer", true )
-addEventHandler("remoteFreezePlayer", getRootElement(), freezePlayer)
+addEventHandler("remoteFreezePlayer", getRootElement(), function(_, commandName, target)
+	if not client then return false end
+	return freezePlayer(client, commandName, target)
+end)
 
 -----------------------------------[UNFREEZE]----------------------------------
 function unfreezePlayer(thePlayer, commandName, target)
@@ -1458,7 +1487,10 @@ end
 addCommandHandler("adminduty", adminDuty, false, false)
 addCommandHandler("aduty", adminDuty, false, false)
 addEvent("admin-system:adminduty", true)
-addEventHandler("admin-system:adminduty", getRootElement(), adminDuty)
+addEventHandler("admin-system:adminduty", getRootElement(), function(_, commandName)
+	if not client then return false end
+	return adminDuty(client, commandName)
+end)
 
 
 function gmDuty(thePlayer, commandName)
@@ -1480,7 +1512,10 @@ end
 addCommandHandler("sduty", gmDuty, false, false)
 addCommandHandler("gduty", gmDuty, false, false)
 addEvent("admin-system:gmduty", true)
-addEventHandler("admin-system:gmduty", getRootElement(), gmDuty)
+addEventHandler("admin-system:gmduty", getRootElement(), function(_, commandName)
+	if not client then return false end
+	return gmDuty(client, commandName)
+end)
 
 -- GET PLAYER ID
 function getPlayerID(thePlayer, commandName, target)
