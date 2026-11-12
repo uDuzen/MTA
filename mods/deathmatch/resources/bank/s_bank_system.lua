@@ -466,13 +466,7 @@ function takeBankMoney(thePlayer, amount, force)
 	local tableName = accountType == "player" and "characters" or "factions"
 	local columnName = accountType == "player" and "bankmoney" or "bankbalance"
 	local query = "UPDATE `" .. tableName .. "` SET `" .. columnName .. "` = `" .. columnName .. "` - ? WHERE `id` = ?"
-	local success
-	if force then
-		success = dbExec(mysql:getConn("mta"), query, safeAmount, accountID)
-	else
-		success = dbExec(mysql:getConn("mta"), query .. " AND `" .. columnName .. "` >= ?", safeAmount, accountID, safeAmount)
-	end
-	if not success then return false end
+	if not dbExec(mysql:getConn("mta"), query, safeAmount, accountID) then return false end
 	setElementDataEx(thePlayer, balanceKey, balance - safeAmount, true)
 	return true
 end
