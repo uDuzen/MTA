@@ -6,25 +6,46 @@ chInterior = 3
 -- CALL BACKS FROM CLIENT
 
 function onEmploymentServer()
-	exports.global:sendLocalText(source, "Jessie Smith says: Hello, are you looking for a new job?", nil, nil, nil, 10)
-	exports.global:sendLocalText(source, " *Jessie Smith hands over a list with jobs to " .. getPlayerName(source):gsub("_", " ") .. ".", 255, 51, 102)
+	local player = client
+	if not player or not isElement(player) or getElementType(player) ~= "player"
+		or tonumber(getElementData(player, "loggedin")) ~= 1 then
+		return false
+	end
+	exports.global:sendLocalText(player, "Jessie Smith says: Hello, are you looking for a new job?", nil, nil, nil, 10)
+	exports.global:sendLocalText(player, " *Jessie Smith hands over a list with jobs to " .. getPlayerName(player):gsub("_", " ") .. ".", 255, 51, 102)
 end
 
 addEvent("onEmploymentServer", true)
 addEventHandler("onEmploymentServer", getRootElement(), onEmploymentServer)
 
 function givePlayerJob(jobID)
-	local charname = getPlayerName(source)
-	local charID = getElementData(source, "dbid")
-	mysql:query_free("UPDATE `characters` SET `job`='"..tostring(jobID).."' WHERE `id`='"..mysql:escape_string(charID).."' ")
-	
-	if (jobID==4) then -- CITY MAINTENANCE
-		exports.global:giveItem(source, 115, "41:1:Spraycan", 2500)
-		outputChatBox("Use this spray to paint over the graffiti you find.", source, 255, 194, 14)
-		exports.anticheat:changeProtectedElementDataEx(source, "tag", 9, false)
-		mysql:query_free("UPDATE characters SET tag=9 WHERE id = " .. mysql:escape_string(getElementData(source, "dbid")) )
+	local player = client
+	if not player or not isElement(player) or getElementType(player) ~= "player"
+		or tonumber(getElementData(player, "loggedin")) ~= 1 then
+		return false
 	end
-	fetchJobInfoForOnePlayer(source)
+	jobID = tonumber(jobID)
+	if not jobID or jobID ~= math.floor(jobID) or jobID < 1 or jobID > 4
+		or tonumber(getElementData(player, "job")) ~= 0 then
+		return false
+	end
+	if jobID <= 3 and tonumber(getElementData(player, "license.car")) ~= 1 then
+		return false
+	end
+	if jobID == 4 and exports.factions:isInFactionType(player, 2) then
+		return false
+	end
+	local charID = tonumber(getElementData(player, "dbid"))
+	if not charID or charID < 1 then return false end
+	mysql:query_free("UPDATE `characters` SET `job`='"..jobID.."' WHERE `id`='"..charID.."' ")
+	if jobID == 4 then -- CITY MAINTENANCE
+		exports.global:giveItem(player, 115, "41:1:Spraycan", 2500)
+		outputChatBox("Use this spray to paint over the graffiti you find.", player, 255, 194, 14)
+		exports.anticheat:changeProtectedElementDataEx(player, "tag", 9, false)
+		mysql:query_free("UPDATE characters SET tag=9 WHERE id = " .. charID)
+	end
+	fetchJobInfoForOnePlayer(player)
+	return true
 end
 addEvent("acceptJob", true)
 addEventHandler("acceptJob", getRootElement(), givePlayerJob)
