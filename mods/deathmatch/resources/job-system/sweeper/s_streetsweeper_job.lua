@@ -26,7 +26,9 @@ end
 addEvent("sweeper:start", true)
 addEventHandler("sweeper:start", root, function(routeIndex)
 	local player = client
-	local valid, vehicle = validPlayer(player) and isSweeper(player)
+	local valid = validPlayer(player)
+	local vehicle
+	if valid then valid, vehicle = isSweeper(player) end
 	routeIndex = tonumber(routeIndex)
 	if not valid or not routeIndex or routeIndex ~= math.floor(routeIndex)
 		or not routePositions[routeIndex] or not nearPoint(player, {1480.6318, 2372.4980, 10.8203}, 35) then
@@ -40,7 +42,9 @@ addEvent("sweeper:setRoute", true)
 addEventHandler("sweeper:setRoute", root, function(routeIndex)
 	local player = client
 	local job = activeSweeperJobs[player]
-	local valid, vehicle = validPlayer(player) and isSweeper(player)
+	local valid = validPlayer(player)
+	local vehicle
+	if valid then valid, vehicle = isSweeper(player) end
 	routeIndex = tonumber(routeIndex)
 	if not job or not valid or vehicle ~= job.vehicle or not routeIndex
 		or routeIndex ~= math.floor(routeIndex) or not routePositions[routeIndex] then return false end
@@ -52,7 +56,9 @@ addEvent("sweeper:completeRoute", true)
 addEventHandler("sweeper:completeRoute", root, function()
 	local player = client
 	local job = activeSweeperJobs[player]
-	local valid, vehicle = validPlayer(player) and isSweeper(player)
+	local valid = validPlayer(player)
+	local vehicle
+	if valid then valid, vehicle = isSweeper(player) end
 	if not job or not valid or vehicle ~= job.vehicle or not job.route
 		or not nearPoint(vehicle, routePositions[job.route], 8) then return false end
 	job.completed = job.completed + 1
@@ -64,7 +70,9 @@ addEvent("sweeper:finish", true)
 addEventHandler("sweeper:finish", root, function()
 	local player = client
 	local job = activeSweeperJobs[player]
-	local valid, vehicle = validPlayer(player) and isSweeper(player)
+	local valid = validPlayer(player)
+	local vehicle
+	if valid then valid, vehicle = isSweeper(player) end
 	if not job or not valid or vehicle ~= job.vehicle or job.completed < 1
 		or not nearPoint(vehicle, {2836, 975, 9.75}, 10) then return false end
 	local wage = math.min(job.completed, 15) * 50
