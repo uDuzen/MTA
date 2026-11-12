@@ -14,47 +14,65 @@ CREATE TABLE IF NOT EXISTS `feedbacks` (
 
 local mysql = exports.mysql
 function formSubmit(staffId, rating, comment)
-	if not staffId or not tonumber(staffId) then
-		outputChatBox("Feedback has failed to submit. Thank you for taking the time to give us your feedback anyway.", source, 255,0,0)
+	local player = client
+	staffId = tonumber(staffId)
+	rating = tonumber(rating)
+	local accountID = player and tonumber(getElementData(player, "account:id"))
+	if not player or not isElement(player) or tonumber(getElementData(player, "loggedin")) ~= 1
+		or not accountID or not staffId or staffId < 1 or staffId ~= math.floor(staffId)
+		or not rating or rating < 1 or rating > 5 or rating ~= math.floor(rating)
+		or (comment ~= nil and (type(comment) ~= "string" or #comment > 500)) then
 		return false
 	end
-	local tail = ""
-	if comment then
-		tail = " , comment='"..mysql:escape_string(comment).."'"
+	local qh = dbQuery(exports.mysql:getConn("core"),
+		"SELECT id FROM accounts WHERE id = ? AND (admin > 0 OR supporter > 0 OR vct > 0 OR scripter > 0 OR mapper > 0 OR fmt > 0) LIMIT 1",
+		staffId)
+	local result = dbPoll(qh, 10000)
+	if not result or not result[1] then
+		outputChatBox("Feedback has failed to submit. Thank you for taking the time to give us your feedback anyway.", player, 255, 0, 0)
+		return false
 	end
-	if mysql:query_free("INSERT INTO feedbacks SET staff_id="..staffId..", rating="..rating..", from_id="..getElementData(source, "account:id")..tail) then
-		outputChatBox("Feedback has successfully submitted. Thank you for taking the time to give us your feedback.", source, 0,255,0)
+	local success = dbExec(exports.mysql:getConn("mta"),
+		"INSERT INTO feedbacks (staff_id, rating, from_id, comment) VALUES (?, ?, ?, ?)",
+		staffId, rating, accountID, comment)
+	if success then
+		outputChatBox("Feedback has successfully submitted. Thank you for taking the time to give us your feedback.", player, 0, 255, 0)
 		return true
-	else
-		outputChatBox("Feedback has failed to submit. Thank you for taking the time to give us your feedback anyway.", source, 255,0,0)
-		return false
 	end
+	outputChatBox("Feedback has failed to submit. Thank you for taking the time to give us your feedback anyway.", player, 255, 0, 0)
+	return false
 end
 addEvent("feedback:formSubmit", true)
 addEventHandler("feedback:formSubmit", root, formSubmit)
 
 function openFeedBackDetails(staff)
-	if staff then
-		local sql = "SELECT id, username FROM accounts WHERE username='"..mysql:escape_string(staff).."'"
-		if tonumber(staff) then
-			sql = "SELECT id, username FROM accounts WHERE id="..staff
-		end
-		local target = mysql:query_fetch_assoc(sql)
-		if target and target.id and tonumber(target.id) then
-			target.id = tonumber(target.id)
-			if target.id ~= getElementData(source, "account:id") and not exports.integration:isPlayerLeadAdmin(source) then
-				return outputChatBox("You don't have sufficient permissions to view feedbacks of this staff member.", source, 255,0,0)
-			end
-			local feedbacks = {}
-			local q = mysql:query("SELECT username, rating, comment, DATE_FORMAT(date,'%b %d, %Y %h:%i %p') AS date FROM feedbacks f LEFT JOIN accounts a ON f.from_id=a.id WHERE f.staff_id="..(target.id).." ORDER BY f.id DESC")
-			while q do
-				local row = mysql:fetch_assoc(q)
-				if not row then break end
-				table.insert(feedbacks, row)
-			end
-			triggerClientEvent(source, "feedback:openFeedBackDetails", source, {feedbacks, target.username})
-		end
+	local player = client or source
+	if not isElement(player) or (type(staff) ~= "string" and type(staff) ~= "number") then return false end
+	staff = tostring(staff)
+	if #staff < 1 or #staff > 64 then return false end
+	local sql = "SELECT id, username FROM accounts WHERE username='"..mysql:escape_string(staff).."'"
+	if tonumber(staff) then
+		local staffID = tonumber(staff)
+		if staffID < 1 or staffID ~= math.floor(staffID) then return false end
+		sql = "SELECT id, username FROM accounts WHERE id="..staffID
 	end
+	local target = mysql:query_fetch_assoc(sql)
+	if target and target.id and tonumber(target.id) then
+		target.id = tonumber(target.id)
+		if target.id ~= tonumber(getElementData(player, "account:id")) and not exports.integration:isPlayerLeadAdmin(player) then
+			return outputChatBox("You don't have sufficient permissions to view feedbacks of this staff member.", player, 255,0,0)
+		end
+		local feedbacks = {}
+		local q = mysql:query("SELECT username, rating, comment, DATE_FORMAT(date,'%b %d, %Y %h:%i %p') AS date FROM feedbacks f LEFT JOIN accounts a ON f.from_id=a.id WHERE f.staff_id="..target.id.." ORDER BY f.id DESC")
+		while q do
+			local row = mysql:fetch_assoc(q)
+			if not row then break end
+			table.insert(feedbacks, row)
+		end
+		triggerClientEvent(player, "feedback:openFeedBackDetails", player, {feedbacks, target.username})
+		return true
+	end
+	return false
 end
 addEvent("feedback:openFeedBackDetails", true)
 addEventHandler("feedback:openFeedBackDetails", root, openFeedBackDetails)
