@@ -133,7 +133,7 @@ function setAllRankPermissions(rankID, permTable, newWage, factionID)
 	factionWages[rankID] = newWage
 	exports.anticheat:setEld(theTeam, "wages", factionWages, 'all')
 	setTimer(function()
-		triggerClientEvent("faction-system.cacheRanks", root, FactionRanks)
+		triggerClientEvent(root, "faction-system.cacheRanks", resourceRoot, FactionRanks)
 	end, 1000, 1)
 	return true
 end
