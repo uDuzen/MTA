@@ -86,7 +86,7 @@ function cleanRoad()
 			outputChatBox("You are not in the van.", 255, 0, 0)
 		else
 			local model = getElementModel(vehicle)
-			if (model==414) then -- MULE
+			if (model==574) then -- STREET SWEEPER
 				if (isElementWithinColShape(vehicle, colshape)) then
 					destroyElement(colshape)
 					destroyElement(marker)
@@ -121,7 +121,7 @@ function cleanRoad()
 		end
 	end
 end
-addCommandHandler("dumpload", dumpTruckLoad)
+addCommandHandler("dumpload", cleanRoad)
 
 function endTruckJob()
 	local vehicle = getPedOccupiedVehicle(localPlayer)
@@ -129,17 +129,14 @@ function endTruckJob()
 		outputChatBox("You are not in the van.", 255, 0, 0)
 	else
 		local model = getElementModel(vehicle)
-		if (model==414) then -- MULE
+		if (model==574) then -- STREET SWEEPER
 			if (jobstate==3) then
 
-				local wage = 50*routescompleted
-				outputChatBox("You earned $" .. wage .. " on your trucking runs.", 255, 194, 15)
-				local vehicle = getPedOccupiedVehicle(localPlayer)
-				triggerServerEvent("giveTruckingMoney", localPlayer, wage)
+				outputChatBox("Your completed runs are being verified by the server.", 255, 194, 15)
+				triggerServerEvent("sweeper:finish", localPlayer)
 
 			end
 			
-			triggerServerEvent("respawnTruck", localPlayer, vehicle)
 			outputChatBox("Thank you for your services to RS Haul.", 0, 255, 0)
 			destroyElement(colshape)
 			destroyElement(marker)
@@ -149,7 +146,6 @@ function endTruckJob()
 			destroyElement(endcolshape)
 			routescompleted = 0
 
-			triggerServerEvent("quitjob", localPlayer)
 		else
 			outputChatBox("You are not in the van.", 255, 0, 0)
 		end
