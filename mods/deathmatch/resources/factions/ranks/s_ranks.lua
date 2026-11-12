@@ -394,16 +394,28 @@ addEvent("faction-system.updateRankPermissions", true)
 addEventHandler("faction-system.updateRankPermissions", root, function(rankID, permissions, wage, factionID)
 	factionID = tonumber(factionID)
 	rankID = tonumber(rankID)
-	wage = tonumber(wage)
+	local rawWage = wage
+	wage = tonumber(rawWage)
+	if wage == nil and (rawWage == nil or rawWage == "") then wage = 0 end
 	if not client or not factionID or factionID < 1 or not rankID or rankID < 1
 		or not hasMemberPermissionTo(client, factionID, "modify_ranks")
 		or getRankFaction(rankID) ~= factionID
-		or type(permissions) ~= "table" or #permissions > 100
+		or type(permissions) ~= "table" or #permissions > #mem_permissions
 		or not wage or wage ~= wage or wage == math.huge or wage < 0 or wage > 2500 then
 		return false
 	end
+	local validPermissions, seenPermissions = {}, {}
+	for _, permission in ipairs(permissions) do
+		local permissionID = tonumber(permission)
+		if not permissionID or permissionID < 1 or permissionID > #mem_permissions
+			or permissionID ~= math.floor(permissionID) or seenPermissions[permissionID] then
+			return false
+		end
+		seenPermissions[permissionID] = true
+		table.insert(validPermissions, permissionID)
+	end
 	local rankName = getRankName(rankID)
-	setAllRankPermissions(rankID, permissions, math.floor(wage), factionID)
+	setAllRankPermissions(rankID, validPermissions, math.floor(wage), factionID)
 	triggerClientEvent(root, "faction-system.cacheRanks", resourceRoot, FactionRanks)
 	outputChatBox("The permissions for '"..tostring(rankName).."' have been successfully updated.", client, 255, 100, 100)
 end) 
