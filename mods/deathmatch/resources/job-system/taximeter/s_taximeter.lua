@@ -112,7 +112,8 @@ function sendTaximeterSync(distance, running, pos, ignoreCheck)
 	local currentPos = { x, y, z }
 	local previousPos = taximeterPositions[theVehicle]
 	local serverDistance = tonumber(getElementData(theVehicle, "taximeter.distance")) or 0
-	if running and previousPos then
+	local wasRunning = getElementData(theVehicle, "taximeter.running") == true
+	if wasRunning and previousPos then
 		serverDistance = serverDistance + getDistanceBetweenPoints3D(
 			previousPos[1], previousPos[2], previousPos[3], x, y, z
 		)
