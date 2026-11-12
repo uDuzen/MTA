@@ -63,6 +63,11 @@ function startSweeperJob()
 				destroyElement(blip)
 				
 				local rand = math.random(1, 15)
+				if not triggerServerEvent("sweeper:start", localPlayer, rand) then
+					outputChatBox("The server could not start your sweeper route.", 255, 0, 0)
+					jobstate = 1
+					return
+				end
 				route = routes[rand]
 				local x, y, z = routes[rand][1], routes[rand][2], routes[rand][3]
 				blip = createBlip(x, y, z, 0, 4, 255, 127, 255)
