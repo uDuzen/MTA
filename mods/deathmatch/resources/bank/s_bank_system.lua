@@ -232,12 +232,16 @@ function transferMoneyToPersonal( fromFactionId, name, amount, reason )
 		if hasBankMoney( sender, amount ) then
 			if takeBankMoney( sender, amount ) then
 				-- if receiver_bank is not null then, receiver must be an offline player.
+				local credited = false
 				if receiver_bank then
-					dbExec( exports.mysql:getConn('mta'), "UPDATE characters SET bankmoney=bankmoney+? WHERE id=?", amount, receiver )
+					credited = dbExec(exports.mysql:getConn("mta"), "UPDATE characters SET bankmoney = bankmoney + ? WHERE id = ?", amount, receiver)
 				else
-					if not giveBankMoney( receiver, amount ) then
-						outputDebugString( "[BANK] Took bankmoney from sender, but unable to give receiver. Code 188." )
-					end
+					credited = giveBankMoney(receiver, amount)
+				end
+				if not credited then
+					giveBankMoney(sender, amount)
+					outputDebugString("[BANK] Transfer rolled back because the receiver could not be credited.")
+					return false
 				end
 				
 				-- logs
