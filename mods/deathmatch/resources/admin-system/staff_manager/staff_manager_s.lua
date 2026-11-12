@@ -149,7 +149,7 @@ function editStaff(userid, ranks, details)
 		local team = tonumber(teamID)
 		local rank = tonumber(rankValue)
 		if not team or team < 1 or team > 6 or team ~= math.floor(team)
-			or not allowedTeams[team] or not rank or rank < 0 or rank > 20 or rank ~= math.floor(rank) then
+			or not rank or rank < 0 or rank > 20 or rank ~= math.floor(rank) then
 			return false
 		end
 		ranks[team] = rank
@@ -171,8 +171,22 @@ function editStaff(userid, ranks, details)
 	staffTitles = exports.integration:getStaffTitles()
 	dbQuery(function(qh, userid, staffTitles, target, userid, ranks, details, thePlayer)
 		local result = dbPoll(qh, 0)
-		if result then
+		if result and result[1] then
 			local user = result[1]
+			local currentRanks = {
+				tonumber(user.admin) or 0,
+				tonumber(user.supporter) or 0,
+				tonumber(user.vct) or 0,
+				tonumber(user.scripter) or 0,
+				tonumber(user.mapper) or 0,
+				tonumber(user.fmt) or 0
+			}
+			for team = 1, 6 do
+				if ranks[team] ~= nil and not allowedTeams[team] and ranks[team] ~= currentRanks[team] then
+					outputChatBox("You do not have permission to change this staff team.", thePlayer, 255, 0, 0)
+					return false
+				end
+			end
 			local tail = ''
 			if details and string.len(details)>0 then
 				details = "'"..mysql:escape_string(details).."'"
