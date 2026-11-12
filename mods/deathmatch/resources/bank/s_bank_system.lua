@@ -463,12 +463,16 @@ function takeBankMoney(thePlayer, amount, force)
 	local balanceKey = accountType == "player" and "bankmoney" or "money"
 	local balance = tonumber(getElementData(thePlayer, balanceKey)) or 0
 	if not force and balance < safeAmount then return false, "Lack of money in bank" end
-	if force and balance < safeAmount then return false, "Insufficient balance" end
 	local tableName = accountType == "player" and "characters" or "factions"
 	local columnName = accountType == "player" and "bankmoney" or "bankbalance"
-	if not dbExec(mysql:getConn("mta"), "UPDATE `" .. tableName .. "` SET `" .. columnName .. "` = `" .. columnName .. "` - ? WHERE `id` = ? AND `" .. columnName .. "` >= ?", safeAmount, accountID, safeAmount) then
-		return false
+	local query = "UPDATE `" .. tableName .. "` SET `" .. columnName .. "` = `" .. columnName .. "` - ? WHERE `id` = ?"
+	local success
+	if force then
+		success = dbExec(mysql:getConn("mta"), query, safeAmount, accountID)
+	else
+		success = dbExec(mysql:getConn("mta"), query .. " AND `" .. columnName .. "` >= ?", safeAmount, accountID, safeAmount)
 	end
+	if not success then return false end
 	setElementDataEx(thePlayer, balanceKey, balance - safeAmount, true)
 	return true
 end
