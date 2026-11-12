@@ -850,7 +850,11 @@ addEvent("factionmenu:hide", true)
 addEventHandler("factionmenu:hide", getRootElement(), hideFactionMenu)
 
 function getFactionFinance(factionID)
-	if not factionID then return end
+	factionID = tonumber(factionID)
+	if not client or not factionID or factionID < 1 or not isFactionMember(client, factionID)
+		or not hasMemberPermissionTo(client, factionID, "manage_finance") then
+		return false
+	end
 
 	if hasMemberPermissionTo(client, factionID, "manage_finance") then
 		local bankThisWeek = {}
@@ -982,16 +986,25 @@ addEventHandler("factionmenu:getFinance", getResourceRootElement(), getFactionFi
 addEvent('factionmenu:setphone', true)
 addEventHandler('factionmenu:setphone', root,
 	function(playerName, number, factionID)
+		factionID = tonumber(factionID)
+		number = number ~= nil and tonumber(number) or nil
+		if not client or not factionID or factionID < 1 or type(playerName) ~= "string"
+			or #playerName < 1 or #playerName > 64
+			or (number ~= nil and (number < 0 or number > 99 or number ~= math.floor(number)))
+			or not isFactionMember(client, factionID)
+			or not hasMemberPermissionTo(client, factionID, "change_member_rank") then
+			return false
+		end
 		local theTeam = getFactionFromID(factionID)
-
+		if not isElement(theTeam) then return false end
 		local _, factionInfo, thePlayer = getPlayerFactions(playerName)
-		if thePlayer and not factionInfo[factionID] then
+		if not factionInfo or not factionInfo[factionID] then
 			outputChatBox("Newp, not going to happen, sorry.", client)
-			return
+			return false
 		end
 
 		local username = getPlayerName(client)
-		local number = tonumber(number) or "NULL"
+		local number = number or "NULL"
 
 		local success = false
 		if tonumber(number) then
@@ -1284,7 +1297,14 @@ end
 
 addEvent("faction-system.showChangeRankGUI", true)
 addEventHandler("faction-system.showChangeRankGUI", root, function(playerName, factionID)
-	local factionID = tonumber(factionID)
+	factionID = tonumber(factionID)
+	if not client or not factionID or factionID < 1 or type(playerName) ~= "string"
+		or #playerName < 1 or #playerName > 64 or not isFactionMember(client, factionID)
+		or not hasMemberPermissionTo(client, factionID, "change_member_rank") then
+		return false
+	end
+	local _, targetFactions = getPlayerFactions(playerName)
+	if not targetFactions or not targetFactions[factionID] then return false end
 
 	local ranks = {}	-- Ranks Table
 	local def_table		-- Default Rank Table
@@ -1302,21 +1322,38 @@ addEventHandler("faction-system.showChangeRankGUI", root, function(playerName, f
 end)
 
 addEvent("faction-system.saveNewRank", true)
-addEventHandler("faction-system.saveNewRank", root, 
-	function(playerName, oldRank, newRank, factionID)
+addEventHandler("faction-system.saveNewRank", root,
+	function(playerName, oldRankName, newRankName, factionID)
 		local fID = tonumber(factionID)
-		local plrRank = getPlayerFactionRank(client)
-		local oldRank = getFactionRankIDByName(fID, oldRank)
-		local newRank = getFactionRankIDByName(fID, newRank)
+		if not client or not fID or fID < 1 or type(playerName) ~= "string"
+			or #playerName < 1 or #playerName > 64 or not isFactionMember(client, fID)
+			or not hasMemberPermissionTo(client, fID, "change_member_rank") then
+			return false
+		end
+		local _, targetFactions = getPlayerFactions(playerName)
+		if not targetFactions or not targetFactions[fID] then return false end
+		local factionData = getElementData(client, "faction")
+		local plrRank = factionData and factionData[fID] and tonumber(factionData[fID].rank)
+		local oldRank = getFactionRankIDByName(fID, oldRankName)
+		local newRank = getFactionRankIDByName(fID, newRankName)
+		local charID = tonumber(exports.global:getCharacterIDFromName(playerName))
+		if not plrRank or not oldRank or not newRank or not charID
+			or getRankFaction(oldRank) ~= fID or getRankFaction(newRank) ~= fID
+			or oldRank == newRank or oldRank == plrRank or newRank == plrRank
+			or getSeniorRank(fID, plrRank, oldRank) ~= plrRank
+			or getSeniorRank(fID, plrRank, newRank) ~= plrRank then
+			outputChatBox("You cannot change this member's rank.", client, 255, 125, 0)
+			return false
+		end
 		local rankName = getRankName(newRank)
-		local charID = exports.global:getCharacterIDFromName(playerName)
-
-		if (oldRank == newRank) then
+		if not rankName then return false end
 			outputChatBox("You cannot change a person's faction rank to the same rank.", client, 255, 125, 0)
 			return
 		end
 		
-		dbExec(exports.mysql:getConn("mta"), "UPDATE `characters_faction` SET `faction_rank` = ? WHERE `character_id` = ? AND `faction_id` = ?", newRank, charID, fID)
+		if not dbExec(exports.mysql:getConn("mta"), "UPDATE `characters_faction` SET `faction_rank` = ? WHERE `character_id` = ? AND `faction_id` = ?", newRank, charID, fID) then
+			return false
+		end
 		local highOrLow = ""
 		if (getSeniorRank(fID, newRank, oldRank) == newRank) then
 			highOrLow = "promoted"
