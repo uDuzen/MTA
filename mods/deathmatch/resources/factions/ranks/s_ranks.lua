@@ -309,13 +309,13 @@ addEventHandler("faction-system.setFactionRankName", root, function(rankID, rank
 		-- Check for Same Rank Name
 	for i,rank in ipairs(getFactionRanks(factionID)) do
 		local rankNm = getRankName(rank)
-		if (rankNm == rankName) then
+		if rank ~= rankID and rankNm == rankName then
 			outputChatBox("A rank with this name already exists. Choose another rank name.", client, 255, 100, 100)
 			return
 		end
 	end
 	local oldName = getRankName(rankID)
-	dbExec(exports.mysql:getConn("mta"), "UPDATE `faction_ranks` SET `name` = ? WHERE `id` = ?", rankName, rankID)
+	if not dbExec(exports.mysql:getConn("mta"), "UPDATE `faction_ranks` SET `name` = ? WHERE `id` = ?", rankName, rankID) then return false end
 	outputChatBox("The '"..oldName.."' rank has been renamed to '"..rankName.."'", client, 255, 100, 100)
 	FactionRanks[rankID]["name"] = rankName
 	local factionRanks = {}
@@ -431,6 +431,8 @@ addEventHandler("faction-system.updateRankOrder", root, function(rankIDs, factio
 		or type(rankIDs) ~= "table" or #rankIDs > 50 then
 		return false
 	end
+	local existingRanks = getFactionRanks(factionID)
+	if type(existingRanks) ~= "table" or #rankIDs ~= #existingRanks then return false end
 	local theTeam = getFactionFromID(factionID)
 	if sortFactionRanks(factionID, rankIDs, theTeam) then
 		getRankInfo(factionID, client)
