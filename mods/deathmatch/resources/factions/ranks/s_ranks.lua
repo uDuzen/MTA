@@ -37,6 +37,12 @@ addEventHandler("faction-system.getRankInfo", root, getRankInfo)
 addEvent("faction-system.addFactionRank", true)
 addEventHandler("faction-system.addFactionRank", root, function(rank, perms, factionID)
 	local fID = tonumber(factionID)
+	if not client or not fID or fID < 1 or not hasMemberPermissionTo(client, fID, "modify_ranks") then
+		return false
+	end
+	if type(rank) ~= "string" then return false end
+	rank = rank:match("^%s*(.-)%s*$")
+	if #rank < 1 or #rank > 32 or type(perms) ~= "table" then return false end
 		-- Check for Same Rank Name
 	for i,rankID in ipairs(getFactionRanks(fID)) do
 		local rankName = getRankName(rankID)
@@ -58,16 +64,30 @@ end)
 ------------------>>
 
 function addFactionRank(FactionID, rankName, permissions, plr)
-	local rank_perms = getAllRankPermissions(perms, true) or {}
+	FactionID = tonumber(FactionID)
+	if not FactionID or FactionID < 1 or type(rankName) ~= "string" then return false end
 	-- Add Permissions Set
-	if (type(permissions) ~= "table") then
+	if type(permissions) ~= "table" then
 		permissions = getDefaultPermissionSet("New Member")
 	end
-	permissions = table.concat(permissions, ",") or ""
-	local qh = dbQuery(exports.mysql:getConn("mta"),"INSERT INTO `faction_ranks` (`faction_id`, `name`, `permissions`) VALUES ('"..FactionID.."','"..rankName.."','"..permissions.."')")
+	local safePermissions = {}
+	for _, permission in ipairs(permissions) do
+		if type(permission) == "string" and #permission <= 64 then
+			table.insert(safePermissions, permission)
+		end
+	end
+	permissions = table.concat(safePermissions, ",")
+	local qh = dbQuery(exports.mysql:getConn("mta"),
+		"INSERT INTO `faction_ranks` (`faction_id`, `name`, `permissions`) VALUES (?, ?, ?)",
+		FactionID, rankName, permissions)
 	local res, num, rID = dbPoll(qh, 10000)
+	if res == false or not rID then
+		outputDebugString("[factions] Failed to create faction rank for faction " .. tostring(FactionID), 1)
+		return false
+	end
 
 	local rankID = tonumber(rID)
+	if not rankID then return false end
 		-- Rank by Faction Association
 	if not (RanksByFaction[FactionID]) then RanksByFaction[FactionID] = {} end
 	table.insert(RanksByFaction[FactionID], rankID)
