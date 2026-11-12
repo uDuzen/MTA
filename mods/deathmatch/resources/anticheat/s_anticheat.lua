@@ -15,7 +15,6 @@ addEventHandler("alertAdminsOfDM", getRootElement(), showDMToAdmins)
 
 -- [MONEY HACKS]
 function scanMoneyHacks()
-	local tick = getTickCount()
 	local hackers = { }
 	local hackersMoney = { }
 	local counter = 0
@@ -38,14 +37,15 @@ function scanMoneyHacks()
 			end
 		end
 	end
-	local tickend = getTickCount()
-
-	local theConsole = getRootElement()
 	for key, value in ipairs(hackers) do
 		local money = hackersMoney[key]
-		local accountID = getElementData(value, "account:id")
-		local adminTitle = exports.global:getPlayerAdminTitle(thePlayer)
-		outputChatBox("AntiCheat: " .. targetPlayerName .. " was auto-banned for Money Hacks. (" .. tostring(money) .. "$)", getRootElement(), 255, 0, 51)
+		if isElement(value) and getElementType(value) == "player" then
+			local playerName = getPlayerName(value) or "Unknown"
+			exports.global:sendMessageToAdmins(
+				"[AntiCheat] Possible money hack: " .. playerName ..
+				" has $" .. tostring(money) .. " more client-side money than the server account."
+			)
+		end
 	end
 end
 setTimer(scanMoneyHacks, 3600000, 0) -- Every 60 minutes
