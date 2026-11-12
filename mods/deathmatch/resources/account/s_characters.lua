@@ -8,6 +8,7 @@
 ]]
 
 local mysql = exports.mysql
+local pendingSpawnLocations = {}
 addEvent( "account:character:spawned", true )
 addEvent( 'account:character:select', true )
 addEvent( 'accounts:characters:fixCharacterSpawnPosition', true )
@@ -47,6 +48,11 @@ function characterList( theClient )
 end
 
 function forumLogin(username, password)
+    if not client or not isElement(client) or getElementType(client) ~= "player"
+        or type(username) ~= "string" or #username < 1 or #username > 64
+        or type(password) ~= "string" or #password < 1 or #password > 128 then
+        return false
+    end
     local result, er = exports.integration:logintoForumAccount(username, password)
     if result then
         setElementData(client, "account:forumid", result['member_id'])
@@ -59,19 +65,24 @@ addEvent("forum:login", true)
 addEventHandler("forum:login", resourceRoot, forumLogin)
 
 function removeForum()
-    mysql:query_free("UPDATE accounts SET forumid=NULL WHERE username='"..getElementData(client, "account:username").."'")
+    if not client or not isElement(client) or getElementType(client) ~= "player" then return false end
+    local username = getElementData(client, "account:username")
+    if type(username) ~= "string" then return false end
+    mysql:query_free("UPDATE accounts SET forumid=NULL WHERE username='"..mysql:escape_string(username).."'")
     removeElementData(client, "account:forumid")
 end
 addEvent("forum:remove", true)
 addEventHandler("forum:remove", resourceRoot, removeForum)
 
 function reloadCharacters(fromButton)
-    local chars = characterList(source)
-    --setElementData(source, "account:characters", chars, true)
-    exports.anticheat:changeProtectedElementDataEx(source, "account:characters", chars)
-    if fromButton then
-        triggerClientEvent(client, "refreshCharacters", resourceRoot)
+    if not client or not isElement(client) or getElementType(client) ~= "player" then return false end
+    local player = client
+    local chars = characterList(player)
+    exports.anticheat:changeProtectedElementDataEx(player, "account:characters", chars)
+    if fromButton == true then
+        triggerClientEvent(player, "refreshCharacters", resourceRoot)
     end
+    return true
 end
 addEvent("updateCharacters", true)
 addEventHandler("updateCharacters", getRootElement(), reloadCharacters)
@@ -457,6 +468,7 @@ function spawnCharacter(characterID, remoteAccountID, theAdmin, targetAccountNam
         if not location then
             location = { locationToSpawn.x, locationToSpawn.y, locationToSpawn.z, locationToSpawn.rot, locationToSpawn.int, locationToSpawn.dim }
         end
+        pendingSpawnLocations[client] = location
 
         triggerClientEvent(client, "accounts:characters:spawn", client, fixedName, adminLevel, gmLevel, location)
         triggerClientEvent(client, "item:updateclient", client)
@@ -523,6 +535,8 @@ end
 addEventHandler("accounts:characters:spawn", getRootElement(), spawnCharacter)
 
 function Characters_onCharacterChange()
+    if not client then return false end
+    pendingSpawnLocations[client] = nil
     triggerClientEvent(client, "items:inventory:hideinv", client)
     --triggerEvent("updateCharacters", client) -- Refresh the character selection screen, perhaps? / No it's too late to update shit here
     triggerEvent("savePlayer", client, "Change Character")
@@ -590,16 +604,35 @@ end
 addEventHandler("accounts:characters:change", getRootElement(), Characters_onCharacterChange)
 
 -- sometimes your character position is not properly set, and your position is retained from the char selection (somewhere near angel pine) albeit it shouldn't be.
-function fixCharacterSpawnPosition(expectedLocation)
-    local currentPositionX, currentPositionY = getElementPosition(client)
-    local expectedPositionX, expectedPositionY = expectedLocation[1], expectedLocation[2]
-    if getDistanceBetweenPoints2D( currentPositionX, currentPositionY, unpack( defaultCharacterSelectionSpawnPosition ) ) < 20 and -- we are near angel pine
-            getDistanceBetweenPoints2D( expectedPositionX, expectedPositionY, unpack( defaultCharacterSelectionSpawnPosition ) ) > 20 then -- but we shouldn't actually be near angel pine
-        setElementPosition(client, expectedPositionX, expectedPositionY, expectedLocation[3])
-        setElementInterior(client, expectedLocation[5] or 0)
-        setElementDimension(client, expectedLocation[6] or 0)
+function fixCharacterSpawnPosition()
+    local player = client
+    if not player or not isElement(player) or getElementType(player) ~= "player"
+        or tonumber(getElementData(player, "loggedin")) ~= 1 then
+        return false
     end
+    local expectedLocation = pendingSpawnLocations[player]
+    pendingSpawnLocations[player] = nil
+    if type(expectedLocation) ~= "table" then return false end
+    local expectedPositionX = tonumber(expectedLocation[1])
+    local expectedPositionY = tonumber(expectedLocation[2])
+    local expectedPositionZ = tonumber(expectedLocation[3])
+    local expectedInterior = tonumber(expectedLocation[5]) or 0
+    local expectedDimension = tonumber(expectedLocation[6]) or 0
+    if not expectedPositionX or not expectedPositionY or not expectedPositionZ then return false end
+
+    local currentPositionX, currentPositionY = getElementPosition(player)
+    if getDistanceBetweenPoints2D(currentPositionX, currentPositionY, unpack(defaultCharacterSelectionSpawnPosition)) < 20
+        and getDistanceBetweenPoints2D(expectedPositionX, expectedPositionY, unpack(defaultCharacterSelectionSpawnPosition)) > 20 then
+        setElementPosition(player, expectedPositionX, expectedPositionY, expectedPositionZ)
+        setElementInterior(player, expectedInterior)
+        setElementDimension(player, expectedDimension)
+        return true
+    end
+    return false
 end
+addEventHandler("onPlayerQuit", root, function()
+    pendingSpawnLocations[source] = nil
+end)
 addEventHandler("accounts:characters:fixCharacterSpawnPosition", root, fixCharacterSpawnPosition)
 
 function removeMasksAndBadges(client)
