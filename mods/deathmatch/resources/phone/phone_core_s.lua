@@ -151,7 +151,7 @@ function applyPhone(action, popOutOnPhoneCall, itemName)
 			setElementDimension(phoneO[source], getElementDimension(source))
 			setElementInterior(phoneO[source], getElementInterior(source))
 
-			exports.bone_attach:attachElementToBone(phoneO[element], source, 12, -0.05, 0.02, 0.02, 20, -90, -10)
+			exports.bone_attach:attachElementToBone(phoneO[source], source, 12, -0.05, 0.02, 0.02, 20, -90, -10)
 			setPedAnimation(source, "ped", action, 1, false)
 			setPedWeaponSlot(source, 0)
 
