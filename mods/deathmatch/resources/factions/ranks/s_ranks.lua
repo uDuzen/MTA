@@ -3,32 +3,34 @@ RanksByFaction = {}
 
 
 function getRankInfo(factionID, player)
-	if (not client) then client = player end
+	local targetPlayer = client or player
 	local fID = tonumber(factionID)
+	if not isElement(targetPlayer) or getElementType(targetPlayer) ~= "player"
+		or not fID or fID < 1
+		or not hasMemberPermissionTo(targetPlayer, fID, "modify_ranks") then
+		return false
+	end
 	local ranks_ = getFactionRanks(fID, true)
-	local ranks = {}			-- Ranks Table
-	local rank_perms = {}		-- Permissions by Rank
+	local ranks = {}
+	local rank_perms = {}
 	local wages = {}
 
 	for i,rankID in ipairs(ranks_) do
 		local rankName = getRankName(tonumber(rankID))
 		table.insert(ranks, {rankID, rankName})
-		
 		local wage = getFactionRankData(rankID, "wage")
-		if wage then
-			wages[rankID] = wage
-		end	
-
+		if wage then wages[rankID] = wage end
 		rank_perms[rankID] = getAllRankPermissions(rankID)
 	end
 	local permissions_ = getFactionPermissions(fID)
 	local permissions = {}
-	for i,perm in ipairs(permissions_) do
+	for _,perm in ipairs(permissions_) do
 		table.insert(permissions, perm[2])
 	end
-	triggerClientEvent(client, "faction-system.setRankInfo", resourceRoot, ranks, rank_perms, permissions, wages)
+	triggerClientEvent(targetPlayer, "faction-system.setRankInfo", resourceRoot, ranks, rank_perms, permissions, wages)
+	return true
 end
-addEvent("faction-system.getRankInfo", true)
+, true)
 addEventHandler("faction-system.getRankInfo", root, getRankInfo)
 
 -- Add Faction Rank
@@ -111,7 +113,7 @@ function addFactionRank(FactionID, rankName, permissions, plr)
 		dbExec(exports.mysql:getConn("mta"), "UPDATE `factions` SET `rank_order` = ? WHERE `id` = ?", newOrder, FactionID)
 	end
 	exports.anticheat:setEld(theTeam, "ranks", factionRanks, 'all')
-	triggerClientEvent("faction-system.cacheRanks", client, FactionRanks)
+	triggerClientEvent(client, "faction-system.cacheRanks", resourceRoot, FactionRanks)
 	return true
 end
 
@@ -274,7 +276,7 @@ function cacheFactionRankDatabase(qh)
 		end
 	end
 	setTimer(function()
-		triggerClientEvent("faction-system.cacheRanks", root, FactionRanks)
+		triggerClientEvent(root, "faction-system.cacheRanks", resourceRoot, FactionRanks)
 	end, 1000, 1)
 end 
 
@@ -385,16 +387,20 @@ end
 
 addEvent("faction-system.updateRankPermissions", true)
 addEventHandler("faction-system.updateRankPermissions", root, function(rankID, permissions, wage, factionID)
-	if not hasMemberPermissionTo(client, factionID, "modify_ranks") then
+	factionID = tonumber(factionID)
+	rankID = tonumber(rankID)
+	wage = tonumber(wage)
+	if not client or not factionID or factionID < 1 or not rankID or rankID < 1
+		or not hasMemberPermissionTo(client, factionID, "modify_ranks")
+		or getRankFaction(rankID) ~= factionID
+		or type(permissions) ~= "table" or #permissions > 100
+		or not wage or wage ~= wage or wage == math.huge or wage < 0 or wage > 2500 then
 		return false
 	end
-	
-	local factionID = tonumber(factionID)
 	local rankName = getRankName(rankID)
-	local newWage = math.min(2500, math.max(0, tonumber(wage) or 0))
-	setAllRankPermissions(rankID, permissions, newWage, factionID)
-	triggerClientEvent("faction-system.cacheRanks", root, FactionRanks)
-	outputChatBox("The permissions for '"..rankName.."' have been successfully updated.", client, 255, 100, 100)
+	setAllRankPermissions(rankID, permissions, math.floor(wage), factionID)
+	triggerClientEvent(root, "faction-system.cacheRanks", resourceRoot, FactionRanks)
+	outputChatBox("The permissions for '"..tostring(rankName).."' have been successfully updated.", client, 255, 100, 100)
 end) 
 
 -- Update Rank Order
@@ -402,14 +408,16 @@ end)
 
 addEvent("faction-system.updateRankOrder", true)
 addEventHandler("faction-system.updateRankOrder", root, function(rankIDs, factionID)
-	if not hasMemberPermissionTo(client, factionID, "modify_ranks") then
+	factionID = tonumber(factionID)
+	if not client or not factionID or factionID < 1
+		or not hasMemberPermissionTo(client, factionID, "modify_ranks")
+		or type(rankIDs) ~= "table" or #rankIDs > 50 then
 		return false
 	end
-	
-	local factionID = tonumber(factionID)
 	local theTeam = getFactionFromID(factionID)
-	sortFactionRanks(factionID, rankIDs, theTeam)
-	getRankInfo(factionID, client)
+	if sortFactionRanks(factionID, rankIDs, theTeam) then
+		getRankInfo(factionID, client)
+	end
 end)
 
 -- Rank Ordering
@@ -440,7 +448,7 @@ end
 
 function cacheOnPlayerSpawn()
 	setTimer(function()
-		triggerClientEvent("faction-system.cacheRanks", source, FactionRanks)
+		triggerClientEvent(source, "faction-system.cacheRanks", resourceRoot, FactionRanks)
 	end, 1000, 1)
 end
 addEventHandler("accounts:character:select", root, cacheOnPlayerSpawn)
@@ -448,7 +456,7 @@ addEventHandler("accounts:character:select", root, cacheOnPlayerSpawn)
 function cacheOnPlayerJoin()
 	setTimer(function(thePlayer) 
 		if isElement(thePlayer) then
-			triggerClientEvent("faction-system.cacheRanks", thePlayer, FactionRanks) 
+			triggerClientEvent(thePlayer, "faction-system.cacheRanks", resourceRoot, FactionRanks) 
 		end
 	end, 1000, 1, source)
 end
