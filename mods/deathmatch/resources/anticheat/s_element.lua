@@ -11,7 +11,10 @@ local secretHandle = 'DwcbeZdBsd432Hcw2SvySv5FcW'
 
 addEventHandler("onElementDataChange", getRootElement(),
 	function (index, oldValue)
-		if not client then
+		if not client or not isElement(client) or getElementType(client) ~= "player" then
+			return
+		end
+		if type(index) ~= "string" or not isElement(source) then
 			return
 		end
 		local theElement = source
@@ -24,10 +27,11 @@ addEventHandler("onElementDataChange", getRootElement(),
 				if (sourceClient) then
 					if (getElementType(sourceClient) == "player") then
 						local newData = getElementData(source, index)
-						local playername = getPlayerName(source) or "Somethings"
+						local sourceType = getElementType(source)
+						local playername = sourceType == "player" and getPlayerName(source) or (getElementID(source) or sourceType)
 						-- Get rid of the player
 						local msg = "[AdmWarn] " .. getPlayerName(sourceClient) .. " sent illegal data. "
-						local msg2 = " (victim: "..playername.." index: "..index .." newvalue:".. tostring(newData) .. " oldvalue:".. tostring(oldValue)  ..")"
+						local msg2 = " (victim: "..tostring(playername).." index: "..index .." newvalue:".. tostring(newData) .. " oldvalue:".. tostring(oldValue)  ..")"
 						--outputConsole(msg)
 						--outputConsole(msg2)
 						--exports.global:sendMessageToAdmins(msg)
