@@ -477,11 +477,63 @@ end
 addEventHandler("onResourceStop", resourceRoot, saveChanges)
 
 function updateTable(newTable, changesTable)
+	local player = client
+	if not player or not isElement(player)
+		or not (exports.integration:isPlayerLeadAdmin(player)
+			or exports.integration:isPlayerScripter(player)
+			or exports.integration:isPlayerFMTLeader(player))
+		or type(newTable) ~= "table" or type(changesTable) ~= "table" or #changesTable > 1000 then
+		return false
+	end
+
+	for factionID, factionData in pairs(newTable) do
+		local id = tonumber(factionID)
+		if not id or not dutyAllow[id] or type(factionData) ~= "table"
+			or tonumber(factionData[1]) ~= id or type(factionData[3]) ~= "table" then
+			return false
+		end
+		for _, item in pairs(factionData[3]) do
+			if type(item) ~= "table" or not tonumber(item[1]) or tonumber(item[1]) < 1
+				or not tonumber(item[2]) or (type(item[3]) ~= "string" and type(item[3]) ~= "number")
+				or #tostring(item[3]) > 128 then
+				return false
+			end
+			local itemID = tonumber(item[2])
+			if itemID > 0 then
+				if not exports["item-system"]:isItem(itemID) then return false end
+			elseif itemID ~= -100 and not getWeaponNameFromID(math.abs(itemID)) then
+				return false
+			end
+		end
+	end
+
+	for _, change in ipairs(changesTable) do
+		if type(change) ~= "table" then return false end
+		local factionID = tonumber(change[1])
+		local action = tonumber(change[2])
+		local rowID = tonumber(change[3])
+		if not factionID or not dutyAllow[factionID] or (action ~= 0 and action ~= 1)
+			or not rowID or rowID < 1 or rowID ~= math.floor(rowID) then
+			return false
+		end
+		if action == 1 then
+			local itemID = tonumber(change[4])
+			if not itemID or itemID == 0
+				or (itemID > 0 and not exports["item-system"]:isItem(itemID))
+				or (itemID < 0 and itemID ~= -100 and not getWeaponNameFromID(math.abs(itemID)))
+				or (type(change[5]) ~= "string" and type(change[5]) ~= "number")
+				or #tostring(change[5]) > 128 then
+				return false
+			end
+		end
+	end
+
 	dutyAllow = newTable
 	dutyAllowChanges = changesTable
 	removeElementData(resourceRoot, "dutyadmin")
 	setElementData(resourceRoot, "dutyAllowTable", dutyAllow)
-	exports.logs:dbLog(client, 4, client, "Has saved /dutyadmin")
+	exports.logs:dbLog(player, 4, player, "Has saved /dutyadmin")
+	return true
 end
 addEvent("dutyAdmin:Save", true)
 addEventHandler("dutyAdmin:Save", resourceRoot, updateTable)
