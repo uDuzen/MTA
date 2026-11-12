@@ -416,11 +416,25 @@ end)
 ----------------->>
 
 function sortFactionRanks(factionID, ranks, theTeam)
-	if (not factionID or type(factionID) ~= "number") then return false end
-	if (not ranks or type(ranks) ~= "table") then return false end
-	ranks = table.concat(ranks, ",")
-	dbExec(exports.mysql:getConn("mta"), "UPDATE `factions` SET `rank_order` = '"..ranks.."' WHERE `id` = "..factionID)
-	exports.anticheat:setEld(theTeam, "rank_order", ranks, 'all')
+	if type(factionID) ~= "number" or factionID < 1 or type(ranks) ~= "table" then return false end
+	local validated, seen = {}, {}
+	for _, value in ipairs(ranks) do
+		local rankID = tonumber(value)
+		if not rankID or rankID < 1 or seen[rankID] or getRankFaction(rankID) ~= factionID then
+			return false
+		end
+		seen[rankID] = true
+		table.insert(validated, tostring(rankID))
+		if #validated > 50 then return false end
+	end
+	if #validated == 0 then return false end
+	local rankOrder = table.concat(validated, ",")
+	theTeam = theTeam or getFactionFromID(factionID)
+	if not isElement(theTeam) then return false end
+	if not dbExec(exports.mysql:getConn("mta"), "UPDATE `factions` SET `rank_order` = ? WHERE `id` = ?", rankOrder, factionID) then
+		return false
+	end
+	exports.anticheat:setEld(theTeam, "rank_order", rankOrder, 'all')
 	return true
 end
 
