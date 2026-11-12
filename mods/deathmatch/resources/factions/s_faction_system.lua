@@ -1390,9 +1390,6 @@ addEventHandler("faction-system.saveNewRank", root,
 		end
 		local rankName = getRankName(newRank)
 		if not rankName then return false end
-			outputChatBox("You cannot change a person's faction rank to the same rank.", client, 255, 125, 0)
-			return
-		end
 		
 		if not dbExec(exports.mysql:getConn("mta"), "UPDATE `characters_faction` SET `faction_rank` = ? WHERE `character_id` = ? AND `faction_id` = ?", newRank, charID, fID) then
 			return false
