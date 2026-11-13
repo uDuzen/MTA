@@ -455,12 +455,18 @@ local function moveWorldItemToElement( item, element )
 		return
 	end
 
-	local id = tonumber(getElementData( item, "id" ))
-	if not id then
+	local itemWorldResource = getResourceFromName("item-world")
+	local itemWorldRoot = itemWorldResource and getResourceRootElement(itemWorldResource)
+	if getElementType(item) ~= "object" or not itemWorldRoot
+		or getElementParent(getElementParent(item)) ~= itemWorldRoot then
+		return false
+	end
+	local id = tonumber(getElementData(item, "id"))
+	if not id or id < 1 or id ~= math.floor(id) then
 		outputChatBox("Error: No world item ID. Notify a scripter. (s_move_items)", source, 255, 0, 0)
 		return false
 	end
-	local itemID = getElementData( item, "itemID" )
+	local itemID = tonumber(getElementData(item, "itemID"))
 	local itemValue = getElementData( item, "itemValue" ) or 1
 	local metadata = getElementData( item, "metadata" )
 	local name = getName(element)
@@ -519,14 +525,30 @@ local function moveWorldItemToElement( item, element )
 			end
 		end
 
-		output(source, element, itemID, itemValue, true, metadata)
-		exports.logs:dbLog( source, 39, source, getPlayerName( source ) .. " put item #" .. id .. " (" .. itemID .. ":" .. getItemName( itemID ) .. ") - " .. itemValue .. " in " .. name .. " #" .. getElementID(element))
-		mysql:query_free("DELETE FROM worlditems WHERE id='" .. id .. "'")
-
-		while #getItems( item ) > 0 do
-			moveItem( item, element, 1 )
+		local shellSlot = #getItems(element)
+		local transferComplete = true
+		while #getItems(item) > 0 do
+			local moved, moveError = moveItem(item, element, 1)
+			if not moved then
+				transferComplete = false
+				outputDebugString("[item-system] World item content transfer stopped: " .. tostring(moveError), 2)
+				break
+			end
 		end
-		destroyElement( item )
+		if not transferComplete then
+			takeItemFromSlot(element, shellSlot)
+			triggerClientEvent(source, "finishItemMove", source)
+			return false
+		end
+		if not mysql:query_free("DELETE FROM worlditems WHERE id='" .. id .. "' LIMIT 1") then
+			takeItemFromSlot(element, shellSlot)
+			outputChatBox("The world item could not be fully collected. Please try again or contact staff.", source, 255, 0, 0)
+			triggerClientEvent(source, "finishItemMove", source)
+			return false
+		end
+		output(source, element, itemID, itemValue, true, metadata)
+		exports.logs:dbLog(source, 39, source, getPlayerName(source) .. " put item #" .. id .. " (" .. itemID .. ":" .. getItemName(itemID) .. ") - " .. tostring(itemValue) .. " in " .. name .. " #" .. getElementID(element))
+		destroyElement(item)
 
 		if itemID == 166 then --video player
 			for key, value in ipairs(getElementsByType("player")) do
