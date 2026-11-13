@@ -60,82 +60,86 @@ function getPermissionTypeIDFromName(name)
 end
 
 function can(player, action, element)
-	global = exports.global
-	integration = exports.integration
-	if not action or not element or not player then return false end
-	local perm = getPermissions(element)
-	if not perm then return false end
-	local usePerm, useData
+	if not isElement(player) or getElementType(player) ~= "player"
+		or tonumber(getElementData(player, "loggedin")) ~= 1
+		or type(action) ~= "string" or not isElement(element)
+		or getElementType(element) ~= "object" then
+		return false
+	end
+
+	local itemWorld = getResourceFromName("item-world")
+	local itemWorldRoot = itemWorld and getResourceRootElement(itemWorld)
+	if not isElement(itemWorldRoot) or getElementParent(getElementParent(element)) ~= itemWorldRoot then
+		return false
+	end
+
+	local permissions = getPermissions(element)
+	if type(permissions) ~= "table" then return false end
+	local permissionType, permissionData
 	if action == "use" then
-		usePerm = perm.use
-		useData = perm.useData
+		permissionType, permissionData = tonumber(permissions.use), permissions.useData
 	elseif action == "move" then
-		usePerm = perm.move
-		useData = perm.moveData
+		permissionType, permissionData = tonumber(permissions.move), permissions.moveData
 	elseif action == "pickup" then
-		usePerm = perm.pickup
-		useData = perm.pickupData
+		permissionType, permissionData = tonumber(permissions.pickup), permissions.pickupData
 	else
 		return false
 	end
-	if usePerm == 0 then --no-one
+	if not permissionType or permissionType ~= math.floor(permissionType)
+		or permissionType < 0 or permissionType > 8 then
 		return false
-	elseif usePerm == 1 then --everyone
+	end
+
+	if permissionType == 0 then
+		return false
+	elseif permissionType == 1 then
 		return true
-	elseif usePerm == 2 then --interior/property owner
-		local dimension = getElementDimension(element)
-		if global:hasItem(player, 4, dimension) or global:hasItem(player, 5, dimension) then
-			return true
-		end
-	elseif usePerm == 3 then --admin only
-		if (integration:isPlayerAdmin(player) and global:isAdminOnDuty(player)) then
-			return true
-		end
-	elseif usePerm == 4 then --factions
-		if not useData then return false end
-		for k,v in ipairs(useData) do
-			local faction = tonumber(v)
-			if exports.factions:isPlayerInFaction(player, faction) then
+	elseif permissionType == 2 then
+		local dimension = tonumber(getElementDimension(element)) or 0
+		if dimension > 20000 then
+			return global:hasItem(player, 3, dimension - 20000) == true
+		elseif dimension > 0 then
+			return global:hasItem(player, 4, dimension) == true
+				or global:hasItem(player, 5, dimension) == true
+			end
+	elseif permissionType == 3 then
+		return integration:isPlayerAdmin(player) and global:isAdminOnDuty(player) or false
+	elseif permissionType == 4 then
+		if type(permissionData) ~= "table" then return false end
+		for _, factionID in ipairs(permissionData) do
+			factionID = tonumber(factionID)
+			if factionID and factionID > 0 and factionID == math.floor(factionID)
+				and exports.factions:isPlayerInFaction(player, factionID) then
 				return true
 			end
 		end
-	elseif usePerm == 5 then --char names
-		if not useData then return false end
+	elseif permissionType == 5 then
+		if type(permissionData) ~= "table" then return false end
 		local playerName = exports.global:getPlayerName(player)
-		for k,v in ipairs(useData) do
-			if v == playerName then
-				return true
-			end
+		if type(playerName) ~= "string" then return false end
+		for _, allowedName in ipairs(permissionData) do
+			if type(allowedName) == "string" and allowedName == playerName then return true end
 		end
-	elseif usePerm == 6 then --interior owner
-		local thisInterior = getElementDimension(element)
-		local interiorElement = getElementByID("int"..tostring(thisInterior))
-		if interiorElement and isElement(interiorElement) then
-			local interiorData = getElementData(interiorElement, "status")
-			local interiorOwner = interiorData.owner
-			if interiorOwner and interiorOwner > 0 then
-				local thisCharacterID = tonumber(getElementData(player, "dbid"))
-				if thisCharacterID then
-					if thisCharacterID == interiorOwner then
-						return true
-					end
-				end
-			end
+	elseif permissionType == 6 then
+		local dimension = tonumber(getElementDimension(element))
+		if not dimension then return false end
+		local interiorElement = getElementByID("int" .. tostring(dimension))
+		if not isElement(interiorElement) then return false end
+		local interiorData = getElementData(interiorElement, "status")
+		if type(interiorData) ~= "table" then return false end
+		local ownerID = tonumber(interiorData.owner)
+		local characterID = tonumber(getElementData(player, "dbid"))
+		return ownerID and ownerID > 0 and characterID == ownerID or false
+	elseif permissionType == 7 then
+		local creatorID = tonumber(getElementData(element, "creator"))
+		local characterID = tonumber(getElementData(player, "dbid"))
+		return creatorID and characterID and creatorID == characterID or false
+	elseif permissionType == 8 then
+		if type(permissionData) ~= "table" or type(permissionData[1]) ~= "string"
+			or #permissionData[1] < 1 or #permissionData[1] > 512 then
+			return false
 		end
-	elseif usePerm == 7 then --item placer
-		local creator = tonumber(getElementData(element, "creator"))
-		if creator then
-			local charid = tonumber(getElementData(player, "dbid"))
-			if charid then
-				if charid == creator then
-					return true
-				end
-			end
-		end
-	elseif usePerm == 8 then --exciter query string
-		local querystring = useData[1]
-		if not querystring then return false end
-		return exports.global:exciterQueryString(player, querystring)
+		return exports.global:exciterQueryString(player, permissionData[1]) == true
 	end
 	return false
 end
