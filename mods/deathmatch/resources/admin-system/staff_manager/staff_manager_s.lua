@@ -209,6 +209,21 @@ function editStaff(userid, ranks, details)
 					return false
 				end
 			end
+			local staffColumns = { "admin", "supporter", "vct", "scripter", "mapper", "fmt" }
+			local assignments, updateValues = {}, {}
+			for team = 1, 6 do
+				if ranks[team] ~= nil and ranks[team] ~= currentRanks[team] then
+					table.insert(assignments, staffColumns[team] .. " = ?")
+					table.insert(updateValues, ranks[team])
+				end
+			end
+			if #assignments > 0 then
+				table.insert(updateValues, userid)
+				if not dbExec(exports.mysql:getConn("core"), "UPDATE accounts SET " .. table.concat(assignments, ", ") .. " WHERE id = ?", unpack(updateValues)) then
+					outputChatBox("Internal Error!", thePlayer, 255, 0, 0)
+					return false
+				end
+			end
 			local tail = ''
 			if details and string.len(details)>0 then
 				details = "'"..mysql:escape_string(details).."'"
@@ -219,7 +234,7 @@ function editStaff(userid, ranks, details)
 				tail = tail.."admin="..ranks[1]..","
 				mysql:query_free("INSERT INTO staff_changelogs SET userid="..userid..", details="..details..", `by`="..adminAccountID..", team=1, from_rank="..user.admin..", to_rank="..ranks[1])
 				exports.global:sendMessageToStaff("[STAFF UPDATE] "..exports.global:getPlayerFullIdentity(thePlayer, 1, true).." has "..(ranks[1] > tonumber(user.admin) and "promoted" or "demoted").." '"..user.username.."' from "..getStaffTitle(1, user.admin).." to "..getStaffTitle(1, ranks[1])..".", true)
-				exports.announcement:makePlayerNotification(target or user.id, "Staff Rank Updated", exports.global:getPlayerFullIdentity(thePlayer, 1, true).." has "..(ranks[1] > tonumber(user.admin) and "promoted" or "demoted").." you from "..getStaffTitle(1, user.admin).." to "..getStaffTitle(1, ranks[1])..". \n" .. (ranks[1] > tonumber(user.admin) and "Congratulations!" or "Sorry!"))
+				exports.announcement:makePlayerNotification(isElement(target) and target or user.id, "Staff Rank Updated", exports.global:getPlayerFullIdentity(thePlayer, 1, true).." has "..(ranks[1] > tonumber(user.admin) and "promoted" or "demoted").." you from "..getStaffTitle(1, user.admin).." to "..getStaffTitle(1, ranks[1])..". \n" .. (ranks[1] > tonumber(user.admin) and "Congratulations!" or "Sorry!"))
 				if target then exports.anticheat:changeProtectedElementDataEx(target, "admin_level", ranks[1], true) end
 				if ranks[1] == 0 then -- Remove all tickets if they get removed from admin
 					dbExec(exports.mysql:getConn("core"), "UPDATE `tc_tickets` SET `assign_to`=NULL WHERE `assign_to`=?", userid)
@@ -265,13 +280,7 @@ function editStaff(userid, ranks, details)
 				if target then exports.anticheat:changeProtectedElementDataEx(target, "fmt_level", ranks[6], true) end
 		
 			end
-			if tail ~= '' then
-				tail = string.sub(tail, 1, string.len(tail)-1)
-				if not dbExec(mysql:getConn("core"), dbPrepareString(mysql:getConn("core"), "UPDATE accounts SET " .. tail .. " WHERE id=" .. userid)) then
-					outputChatBox("Internal Error!", thePlayer, 255, 0, 0)
-					return false
-				end
-			end
+			-- The rank columns were committed before any notifications or runtime data changes.
 			triggerEvent("staff:getStaffInfo", thePlayer, user.username, "Staff rank for "..user.username.." has been set!")
 		end
 	end, {userid, staffTitles, target, userid, ranks, details, thePlayer}, exports.mysql:getConn("core"), "SELECT id, username, admin, supporter, vct, scripter, mapper, fmt FROM accounts WHERE id=?", userid)
