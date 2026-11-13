@@ -532,43 +532,67 @@ function dropItem(itemID, x, y, z, ammo, keepammo, cancelAnim)
 				setPedArmor(source, 0)
 			end
 
-			local query = mysql:query("INSERT INTO worlditems SET itemid=" .. -itemID .. ", itemvalue=" .. ammo .. ", creationdate=NOW(), x=" .. x .. ", y=" .. y .. ", z=" .. z+0.1 .. ", dimension=" .. dimension .. ", interior=" .. interior .. ", rz = " .. rz2 .. ", creator=" .. getElementData(source, "dbid").. ", metadata = " .. (metadata and ("'" .. mysql:escape_string(toJSON(metadata)) .. "'") or "NULL"))
-			if query then
-				local id = mysql:insert_id()
-				mysql:free_result(query)
+			local weaponSlot = itemID == 100 and nil or getSlotFromWeapon(itemID)
+			local previousAmmo = weaponSlot and getPedTotalAmmo(source, weaponSlot) or getPedArmor(source)
+			local previousClip = weaponSlot and getPedAmmoInClip(source, weaponSlot) or 0
+			if not previousAmmo or ammo > previousAmmo then
+				outputChatBox("You do not have that amount of ammunition to drop.", source, 255, 0, 0)
+				triggerClientEvent(source, "finishItemDrop", source)
+				return false
+			end
 
-				exports.global:takeWeapon(source, itemID)
-				if keepammo then
-					exports.global:giveWeapon(source, itemID, keepammo)
+			local query = mysql:query("INSERT INTO worlditems SET itemid=" .. -itemID .. ", itemvalue=" .. ammo .. ", creationdate=NOW(), x=" .. x .. ", y=" .. y .. ", z=" .. (z + 0.1) .. ", dimension=" .. dimension .. ", interior=" .. interior .. ", rz=" .. rz2 .. ", creator=" .. tonumber(getElementData(source, "dbid")) .. ", metadata=" .. (metadata and ("'" .. mysql:escape_string(toJSON(metadata)) .. "'") or "NULL"))
+			if not query then
+				outputChatBox("The weapon could not be dropped. Your weapon was not changed.", source, 255, 0, 0)
+				triggerClientEvent(source, "finishItemDrop", source)
+				return false
+			end
+
+			local id = mysql:insert_id()
+			mysql:free_result(query)
+			local modelid = itemID == 100 and 1242 or (itemID == 42 and 2690 or weaponmodels[itemID])
+			local obj = exports["item-world"]:createItem(id, -itemID, ammo, modelid, x, y, z - 0.4, 75, -10, rz2)
+			if not isElement(obj) then
+				mysql:query_free("DELETE FROM worlditems WHERE id = " .. tonumber(id) .. " LIMIT 1")
+				outputChatBox("The world object could not be created. Your weapon was not changed.", source, 255, 0, 0)
+				triggerClientEvent(source, "finishItemDrop", source)
+				return false
+			end
+
+			if itemID == 100 then
+				setPedArmor(source, 0)
+			else
+				if not takeWeapon(source, itemID) then
+					mysql:query_free("DELETE FROM worlditems WHERE id = " .. tonumber(id) .. " LIMIT 1")
+					destroyElement(obj)
+					outputChatBox("The weapon could not be removed from your hands. The drop was cancelled.", source, 255, 0, 0)
+					triggerClientEvent(source, "finishItemDrop", source)
+					return false
 				end
-
-				local modelid = 2969
-				-- MODEL ID
-				if (itemID==100) then
-					modelid = 1242
-				elseif (itemID==42) then
-					modelid = 2690
-				else
-					modelid = weaponmodels[itemID]
+				if keepammo > 0 and not giveWeapon(source, itemID, keepammo, true) then
+					local restored = giveWeapon(source, itemID, previousAmmo, true)
+					mysql:query_free("DELETE FROM worlditems WHERE id = " .. tonumber(id) .. " LIMIT 1")
+					destroyElement(obj)
+					if not restored then
+						outputDebugString("[item-system] Failed to restore dropped weapon " .. itemID .. " for " .. getPlayerName(source), 1)
+						outputChatBox("Weapon rollback failed. Contact staff immediately.", source, 255, 0, 0)
+					else
+						outputChatBox("The weapon could not be stored on the ground; your original weapon was restored.", source, 255, 0, 0)
+					end
+					triggerClientEvent(source, "finishItemDrop", source)
+					return false
 				end
+			end
 
-				local obj = exports['item-world']:createItem(id, -itemID, ammo, modelid, x, y, z - 0.4, 75, -10, rz2)
-				exports.pool:allocateElement(obj)
-
-				setElementInterior(obj, interior)
-				setElementDimension(obj, dimension)
-
-				moveObject(obj, 200, x, y, z+0.1)
-
-				exports.anticheat:changeProtectedElementDataEx(obj, "creator", getElementData(source, "dbid"), false)
-
-				exports.anticheat:changeProtectedElementDataEx(obj, "metadata", metadata)
-
-				triggerEvent('sendAme', source, "dropped a " .. getItemName( -itemID, nil, metadata ) .. ".")
-
+			setElementInterior(obj, interior)
+			setElementDimension(obj, dimension)
+			moveObject(obj, 200, x, y, z + 0.1)
+			exports.anticheat:changeProtectedElementDataEx(obj, "creator", getElementData(source, "dbid"), false)
+			exports.anticheat:changeProtectedElementDataEx(obj, "metadata", metadata)
+			exports.logs:dbLog(source, 39, source, getPlayerName(source) .. " -> ~World #" .. getElementID(obj) .. " - " .. getItemName(-itemID) .. " - " .. ammo .. " @ (" .. x .. ", " .. y .. ", " .. z .. ") in (int " .. interior .. ", dim " .. dimension .. ")")
+			triggerEvent("sendAme", source, "drops a " .. (getWeaponNameFromID(itemID) or "Body Armor") .. ".")
+			if isElement(obj) then
 				triggerClientEvent(source, "saveGuns", source, getPlayerName(source))
-
-				exports.logs:dbLog(source, 39, source, getPlayerName(source).. " -> ~World #" .. getElementID(obj) .. " - " .. getItemName( -itemID ) .. " - " .. ammo.." @ ("..x..", "..y..", "..z..") in (int "..interior..", dim "..dimension..")" )
 			end
 		end
 	end
