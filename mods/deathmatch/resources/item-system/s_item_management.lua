@@ -216,7 +216,7 @@ function loadItems( element, force )
 			end
 			return true
 		else
-			notify( element, true )
+			saveditems[element] = nil
 			return false, "MySQL-Error"
 		end
 	else
@@ -234,40 +234,48 @@ addEvent( "itemResourceStarted", false )
 addEventHandler( "itemResourceStarted", getRootElement( ), itemResourceStarted )
 
 -- clear all items for an element
-function clearItems( element, onlyifnosqlones )
-	if saveditems[element] then
-		if onlyifnosqlones and #saveditems[element] > 0 then
+function clearItems(element, onlyifnosqlones)
+	if not isElement(element) then return false end
+	local loaded, loadError = loadItems(element)
+	if not loaded then
+		outputDebugString("[item-system] clearItems could not load inventory: " .. tostring(loadError), 1)
+		return false
+	end
+	if onlyifnosqlones and #saveditems[element] > 0 then return false end
+	while #saveditems[element] > 0 do
+		local removed, removeError = takeItemFromSlot(element, 1)
+		if not removed then
+			outputDebugString("[item-system] clearItems stopped before deleting all rows: " .. tostring(removeError), 1)
 			return false
-		else
-			while #saveditems[ element ] > 0 do
-				takeItemFromSlot( element, 1 )
-			end
-
-			saveditems[ element ] = nil
-			notify( element, true )
 		end
 	end
+	saveditems[element] = nil
+	notify(element, true)
 	return true
 end
 
 -- A special clear items for storage items
-function SpecialclearItems( element, onlyifnosqlones )
-	if saveditems[element] then
-		if onlyifnosqlones and #saveditems[element] > 0 then
+function SpecialclearItems(element, onlyifnosqlones)
+	if not isElement(element) then return false end
+	local loaded, loadError = loadItems(element)
+	if not loaded then
+		outputDebugString("[item-system] SpecialclearItems could not load inventory: " .. tostring(loadError), 1)
+		return false
+	end
+	if onlyifnosqlones and #saveditems[element] > 0 then return false end
+	while #saveditems[element] > 0 do
+		local removed, removeError = takeItemFromSlot(element, 1)
+		if not removed then
+			outputDebugString("[item-system] SpecialclearItems stopped before deleting all rows: " .. tostring(removeError), 1)
 			return false
-		else
-			while #saveditems[ element ] > 0 do
-				takeItemFromSlot( element, 1 )
-			end
-
-			saveditems[ element ] = nil
-			notify( element, true )
-
-			destroyInventory(element)
-			if (getElementType(element) == 'player') then
-				triggerEvent("updateLocalGuns", element)
-			end
 		end
+	end
+	saveditems[element] = nil
+	notify(element, true)
+	local destroyed = destroyInventory(element)
+	if destroyed == false then return false end
+	if getElementType(element) == "player" then
+		triggerEvent("updateLocalGuns", element)
 	end
 	return true
 end
@@ -399,7 +407,11 @@ function takeItemFromSlot(element, slot, nosqlupdate, no_update_guns)
 			local index = saveditems[element][slot][3]
 			local success = true
 			if not nosqlupdate then
-				local result = mysql:query_free( "DELETE FROM items WHERE `index` = " .. index .. " LIMIT 1" )
+				index = tonumber(index)
+				if not index or index < 1 or index ~= math.floor(index) then
+					return false, "Invalid database item index"
+				end
+				local result = mysql:query_free("DELETE FROM items WHERE `index` = " .. index .. " LIMIT 1")
 				--[[if itemID == 178 then
 					local query = mysql:query_free( "DELETE FROM books WHERE id = " .. index .. " LIMIT 1")
 				end]]
@@ -417,7 +429,7 @@ function takeItemFromSlot(element, slot, nosqlupdate, no_update_guns)
 				end
 				return true
 			end
-			return false, "Slot does not exist."
+			return false, "Database delete failed"
 		end
 	else
 		return false, "loadItems error: " .. error
@@ -712,9 +724,10 @@ end
 function getItems(element)
 	local success = loadItems(element)
 	if success then
-		return saveditems[element]
+		return saveditems[element] or {}
 	end
-	return false
+	-- Keep the historical table return contract for existing resource callers.
+	return {}
 end
 
 
