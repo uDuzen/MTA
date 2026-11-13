@@ -711,7 +711,7 @@ function getItems(element)
 	if success then
 		return saveditems[element]
 	end
-	return {}
+	return false
 end
 
 
