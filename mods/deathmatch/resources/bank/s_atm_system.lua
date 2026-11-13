@@ -1,9 +1,52 @@
 --MAXIME
 --ATM Card system
 local cooldown = {}
+local MAX_ATM_TRANSACTION = 1000000000
+
+local function validateATMInteraction(player, atm)
+	if not isElement(player) or getElementType(player) ~= "player"
+		or client ~= player or source ~= player
+		or tonumber(getElementData(player, "loggedin")) ~= 1
+		or not isElement(atm) or getElementType(atm) ~= "object"
+		or getElementModel(atm) ~= 2942 then
+		return false
+	end
+	if getElementDimension(player) ~= getElementDimension(atm)
+		or getElementInterior(player) ~= getElementInterior(atm) then
+		return false
+	end
+	local px, py, pz = getElementPosition(player)
+	local ax, ay, az = getElementPosition(atm)
+	if getDistanceBetweenPoints3D(px, py, pz, ax, ay, az) > 3.5 then
+		return false
+	end
+	return true
+end
+
+local function validateATMAmount(value)
+	local amount = tonumber(value)
+	if not amount or amount ~= amount or amount == math.huge or amount == -math.huge
+		or amount < 1 or amount > MAX_ATM_TRANSACTION or amount ~= math.floor(amount) then
+		return false
+	end
+	return amount
+end
+
+local function validateATMCardNumber(cardNumber)
+	return type(cardNumber) == "string"
+		and cardNumber:match("^%d%d%d%d %d%d%d%d %d%d%d%d %d%d%d%d$") ~= nil
+end
 
 
 function checkInsideATMMachine(theATM, absX, absY)
+	if not validateATMInteraction(client, theATM) then return false end
+	absX, absY = tonumber(absX), tonumber(absY)
+	if not absX or not absY or absX ~= absX or absY ~= absY
+		or absX < 0 or absX > 1 or absY < 0 or absY > 1 then return false end
+	if not exports["item-system"]:loadItems(theATM) then
+		triggerClientEvent(client, "bank:respondToPendingTransfer", client, "ATM inventory is temporarily unavailable.")
+		return false
+	end
 	local foundAnATMCard = getATMCardFromATMMachine(theATM)
 	if not foundAnATMCard then
 		exports.hud:sendBottomNotification(source,"ATM Card is required!", "Please insert your ATM card into the ATM machine's slot.")
@@ -40,7 +83,18 @@ function isAltToAlt(source, item)
 end
 
 function takeOutATMCard(theATM, item)
-	local v = split( item[2], ";" )[2]
+	local player = client
+	if not validateATMInteraction(player, theATM)
+		or type(item) ~= "table" or tonumber(item[1]) ~= 150
+		or type(item[2]) ~= "string" or #item[2] > 256
+		or not exports["item-system"]:loadItems(theATM) then
+		return false
+	end
+	local hasStoredCard = exports["item-system"]:hasItem(theATM, 150, item[2])
+	if not hasStoredCard then return false end
+	local values = split(item[2], ";")
+	local v = values and values[2]
+	if not v or not tonumber(v) then return false end
 	if tonumber(v) ~= tonumber(getElementData(source, "account:character:id")) then
 		if isAltToAlt(source, v) then
 			outputChatBox("Denied - Card Deleted.", source, 255, 0, 0)
@@ -48,18 +102,22 @@ function takeOutATMCard(theATM, item)
 			return
 		end
 	end
-	if exports["item-system"]:takeItem(theATM, item[1], item[2]) then
-		if exports["item-system"]:giveItem(source, item[1], item[2]) then
-			triggerEvent('sendAme',  source, "slips out an ATM card from the ATM machine's slot." )
-			playAtmInsert(theATM) --SoundFX
-		else
-			triggerEvent('sendAme',  source, "tries slip the ATM card out of the ATM machine's slot but failed." )
-			exports["item-system"]:giveItem(theATM, item[1], item[2])
-			exports.hud:sendBottomNotification(source,"ATM Machine", "Your inventory is full.")
+	if exports["item-system"]:takeItem(theATM, 150, item[2]) then
+		if exports["item-system"]:giveItem(player, 150, item[2]) then
+			triggerEvent("sendAme", player, "slips out an ATM card from the ATM machine's slot.")
+			playAtmInsert(theATM)
+			return true
 		end
-	else
-		triggerEvent('sendAme',  source, "tries slip the ATM card out of the ATM machine's slot but failed." )
+		if not exports["item-system"]:giveItem(theATM, 150, item[2]) then
+			outputDebugString("[BANK] Failed to restore ATM card to machine after inventory grant failure.", 1)
+			outputChatBox("The ATM card could not be restored. Please contact staff immediately.", player, 255, 0, 0)
+		end
+		triggerEvent("sendAme", player, "tries to slip an ATM card out of the ATM machine's slot but fails.")
+		exports.hud:sendBottomNotification(player, "ATM Machine", "Your inventory is full.")
+		return false
 	end
+	triggerEvent("sendAme", player, "tries to slip an ATM card out of the ATM machine's slot but fails.")
+	return false
 end
 addEvent( "bank:takeOutATMCard", true )
 addEventHandler( "bank:takeOutATMCard", getRootElement(), takeOutATMCard )
@@ -440,6 +498,9 @@ addEvent( "bank:changePIN", true )
 addEventHandler( "bank:changePIN", getRootElement(), changePIN )
 
 function withdrawATMMoneyPersonal(amount, theATM)
+	local player = client
+	amount = validateATMAmount(amount)
+	if not player or not amount or not validateATMInteraction(player, theATM) then return false end
 	local state = tonumber(getElementData(client, "loggedin")) or 0
 	if (state == 0) then
 		return false
@@ -542,6 +603,9 @@ addEvent("bank:withdrawATMMoneyPersonal", true)
 addEventHandler("bank:withdrawATMMoneyPersonal", getRootElement(), withdrawATMMoneyPersonal)
 
 function depositATMMoneyPersonal(amount, theATM)
+	local player = client
+	amount = validateATMAmount(amount)
+	if not player or not amount or not validateATMInteraction(player, theATM) then return false end
 	local state = tonumber(getElementData(client, "loggedin")) or 0
 	if (state == 0) then
 		return false
@@ -647,6 +711,12 @@ addEvent("bank:depositATMMoneyPersonal", true)
 addEventHandler("bank:depositATMMoneyPersonal", getRootElement(), depositATMMoneyPersonal)
 
 function transferATMMoneyToPersonal(theATM, amount,targetBankAccNo, reason)
+	local player = client
+	amount = validateATMAmount(amount)
+	if not player or not amount or not validateATMInteraction(player, theATM)
+		or type(targetBankAccNo) ~= "string" or #targetBankAccNo < 1 or #targetBankAccNo > 32
+		or targetBankAccNo:find("[%c]") then return false end
+	if reason ~= nil and (type(reason) ~= "string" or #reason > 128 or reason:find("[%c]")) then return false end
 	local state = tonumber(getElementData(client, "loggedin")) or 0
 	if (state == 0) then
 		return false
