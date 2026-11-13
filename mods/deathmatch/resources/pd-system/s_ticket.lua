@@ -204,9 +204,14 @@ addEventHandler("chargePlayer", getRootElement(), function(amount, method, crime
 		paid = exports.bank:takeBankMoney(player, fine)
 	end
 	local function restoreTicketAndPayment()
-		dbExec(exports.mysql:getConn('mta'),
+		local ticketRestored = dbExec(exports.mysql:getConn('mta'),
 			"UPDATE `mdc_crimes` SET `punishment` = ? WHERE `id` = ? AND `character` = ? AND `punishment` = ?",
 			punishment, crimeID, characterID, paidText)
+		if not ticketRestored then
+			outputDebugString("[pd-system] Failed to restore unpaid ticket " .. crimeID .. "; payment remains collected.", 1)
+			outputChatBox("Ticket rollback failed. Your payment remains recorded; please contact staff.", player, 255, 0, 0)
+			return false
+		end
 		local refunded
 		if method == 1 then
 			refunded = exports.global:giveMoney(player, fine)
@@ -214,14 +219,21 @@ addEventHandler("chargePlayer", getRootElement(), function(amount, method, crime
 			refunded = exports.bank:giveBankMoney(player, fine)
 		end
 		if not refunded then
-			outputDebugString("[pd-system] Failed to refund ticket payment for character " .. characterID .. ", ticket " .. crimeID, 1)
-			outputChatBox("Ticket payment rollback failed. Please contact staff immediately.", player, 255, 0, 0)
+			local markedPaid = dbExec(exports.mysql:getConn('mta'),
+				"UPDATE `mdc_crimes` SET `punishment` = ? WHERE `id` = ? AND `character` = ? AND `punishment` = ?",
+				paidText, crimeID, characterID, punishment)
+			outputDebugString("[pd-system] Failed to refund ticket payment for character " .. characterID .. ", ticket " .. crimeID .. "; paid state restored=" .. tostring(markedPaid), 1)
+			outputChatBox("Ticket refund failed. Please contact staff immediately.", player, 255, 0, 0)
+			return false
 		end
+		return true
 	end
 	if not paid then
-		dbExec(exports.mysql:getConn('mta'),
+		if not dbExec(exports.mysql:getConn('mta'),
 			"UPDATE `mdc_crimes` SET `punishment` = ? WHERE `id` = ? AND `character` = ? AND `punishment` = ?",
-			punishment, crimeID, characterID, paidText)
+			punishment, crimeID, characterID, paidText) then
+			outputDebugString("[pd-system] Failed to revert unpaid state after declined payment for ticket " .. crimeID, 1)
+		end
 		processingTickets[lockKey] = nil
 		return false
 	end
@@ -233,7 +245,9 @@ addEventHandler("chargePlayer", getRootElement(), function(amount, method, crime
 	end
 	if not exports.global:giveMoney(medicalFaction, medicalShare) then
 		if not exports.global:takeMoney(lawFaction, lawShare) then
-			outputDebugString("[pd-system] Failed to reverse law-faction ticket credit " .. crimeID, 1)
+			outputDebugString("[pd-system] Failed to reverse law-faction ticket credit " .. crimeID .. "; ticket remains paid and player remains charged.", 1)
+			processingTickets[lockKey] = nil
+			return false
 		end
 		restoreTicketAndPayment()
 		processingTickets[lockKey] = nil
