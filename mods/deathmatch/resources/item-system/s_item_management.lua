@@ -524,100 +524,104 @@ function moveItem2(from, to, slot)
 end
 
 function moveItem(from, to, slot)
-	local success, error = loadItems( from )
-	if success then
-		local success, error = loadItems( to )
-		if success then
-			if saveditems[from] and saveditems[from][slot] then
-				if hasSpaceForItem(to, saveditems[from][slot][1], saveditems[from][slot][2], saveditems[from][slot][5]) then
-					local itemIndex = saveditems[from][slot][3]
-					if itemIndex then
-						local itemID = saveditems[from][slot][1]
-						if itemID == 48 or itemID == 126 or itemID == 60 or itemID == 103 or itemID == 163 then
-							return false, "This Item cannot be moved"
-						else
-							local query = mysql:query_free( "UPDATE items SET type = " .. getType(to) .. ", owner = " .. getID(to) .. " WHERE `index` = " .. itemIndex )
-							if query then
-
-								local itemValue = saveditems[from][slot][2]
-								local metadata = saveditems[from][slot][5]
-								--CHECK FOR DUPLICATED WEAPONS
-								if itemID == 115 or itemID == 116 then
-									local target = from
-									if getElementType(to) == "player" then
-										target = to
-									end
-									if isThisGunDuplicated(itemID, itemValue, target) then
-										takeItemFromSlot(from, slot, false)
-										outputChatBox("This weapon was duplicated by bug abuser and can not be used anymore. We're sorry to delete it now.", target, 255,0,0)
-										return false, "Weapon ID#"..itemIndex.." duplicate detected and deleted."
-									end
-								end
-
-								-- ANTI ALT-ALT FOR NON AMMO ITEMS, CHECK THIS FUNCTION FOR AMMO ITEM BELOW AND FOR WORLD ITEM CHECK s_world_items.lua/ MAXIME
-								--31 -> 43  = DRUGS
-								if ( (itemID >= 31) and (itemID <= 43) ) or itemBannedByAltAltChecker[itemID] then
-									if itemID == 150 then
-										if getElementModel(from) == 2942 or getElementModel(to) == 2942 then
-											takeItemFromSlot(from, slot, true)
-											giveItem(to, itemID, itemValue, itemIndex, nil, metadata)
-											return true
-										end
-									end
-
-									local hoursPlayedFrom = getElementData( from, "hoursplayed" ) or 99
-									local hoursPlayedTo = getElementData( to, "hoursplayed" ) or 99
-
-									if not exports.global:isStaffOnDuty(to) and not exports.global:isStaffOnDuty(from) then
-										if hoursPlayedFrom < 10 then
-											outputChatBox("You require 10 hours of playing time to move a "..getItemName( itemID ).." to a "..getName(to)..".", from, 255, 0, 0)
-											return false, "Item move cancelled, < 10 hours"
-										end
-
-										if hoursPlayedTo < 10 then
-											if not (itemID == 3 and getElementData(exports.pool:getElement("vehicle", itemValue), "owner") == getElementData(source, "dbid")) then -- Checks if they own the vehicle for the key
-												outputChatBox("You require 10 hours of playing time to receive a "..getItemName( itemID ).." from a "..getName(from)..".", to, 255, 0, 0)
-												return false, "Item move cancelled, < 10 hours"
-											end
-										end
-									end
-								end
-
-
-								if itemID == 134 then -- MONEY
-									if takeItemFromSlot(from, slot, true) then
-										if exports.global:giveMoney(to, tonumber(itemValue)) then
-											return true
-										end
-									end
-								else
-									if takeItemFromSlot(from, slot, true) then
-										if giveItem(to, itemID, itemValue, itemIndex, nil, metadata) then
-											return true
-										end
-									end
-								end
-							else
-								return false, "MySQL-Query failed."
-							end
-						end
-					else
-						return false, "Item does not exist."
-					end
-				else
-					return false, "Target does not have Space for Item."
-				end
-			else
-				return false, "Slot does not exist."
-			end
-		else
-			return false, "loadItems(to) error: " .. error
-		end
-	else
-		return false, "loadItems(from) error: " .. error
+	if not isElement(from) or not isElement(to) or from == to
+		or type(slot) ~= "number" or slot < 1 or slot ~= math.floor(slot) then
+		return false, "Invalid inventory transfer"
 	end
-end
+	local loaded, loadError = loadItems(from)
+	if not loaded then return false, "loadItems(from) error: " .. tostring(loadError) end
+	loaded, loadError = loadItems(to)
+	if not loaded then return false, "loadItems(to) error: " .. tostring(loadError) end
 
+	local item = saveditems[from] and saveditems[from][slot]
+	if not item then return false, "Slot does not exist." end
+	local itemID, itemValue, itemIndex, protected, metadata = item[1], item[2], item[3], item[4], item[5]
+	if not itemIndex then return false, "Invalid item index" end
+	if itemID == 48 or itemID == 126 or itemID == 60 or itemID == 103 or itemID == 163 then
+		return false, "This Item cannot be moved"
+	end
+	if not hasSpaceForItem(to, itemID, itemValue, metadata) then
+		return false, "Target does not have Space for Item."
+	end
+
+	-- Detect duplicated weapons before changing the database owner.
+	if itemID == 115 or itemID == 116 then
+		local target = getElementType(to) == "player" and to or from
+		if isThisGunDuplicated(itemID, itemValue, target) then
+			takeItemFromSlot(from, slot, false)
+			outputChatBox("This weapon was duplicated by bug abuser and can not be used anymore. We're sorry to delete it now.", target, 255, 0, 0)
+			return false, "Weapon ID#" .. tostring(itemIndex) .. " duplicate detected and deleted."
+		end
+	end
+
+	-- Anti-alt-alt restrictions must run before the database owner is changed.
+	if ((itemID >= 31 and itemID <= 43) or itemBannedByAltAltChecker[itemID]) then
+		local fromATM = getElementType(from) == "object" and getElementModel(from) == 2942
+		local toATM = getElementType(to) == "object" and getElementModel(to) == 2942
+		if itemID == 150 and (fromATM or toATM) then
+			-- ATM card transfers are allowed through the ATM interface.
+		else
+			local hoursPlayedFrom = tonumber(getElementData(from, "hoursplayed")) or 99
+			local hoursPlayedTo = tonumber(getElementData(to, "hoursplayed")) or 99
+			if not exports.global:isStaffOnDuty(to) and not exports.global:isStaffOnDuty(from) then
+				if hoursPlayedFrom < 10 then
+					outputChatBox("You require 10 hours of playing time to move a " .. getItemName(itemID) .. " to a " .. getName(to) .. ".", from, 255, 0, 0)
+					return false, "Item move cancelled, < 10 hours"
+				end
+				if hoursPlayedTo < 10 then
+					local ownsKeyVehicle = false
+					if itemID == 3 then
+						local keyVehicle = exports.pool:getElement("vehicle", itemValue)
+						ownsKeyVehicle = isElement(keyVehicle)
+							and tonumber(getElementData(keyVehicle, "owner")) == tonumber(getElementData(from, "dbid"))
+					end
+					if not ownsKeyVehicle then
+						outputChatBox("You require 10 hours of playing time to receive a " .. getItemName(itemID) .. " from a " .. getName(from) .. ".", to, 255, 0, 0)
+						return false, "Item move cancelled, < 10 hours"
+					end
+				end
+			end
+		end
+	end
+
+	-- Cash items are converted to account cash, so delete the inventory row
+	-- only after the recipient has successfully received the money.
+	if itemID == 134 then
+		local amount = tonumber(itemValue)
+		if not amount or amount ~= amount or amount == math.huge or amount <= 0 then
+			return false, "Invalid cash item value"
+		end
+		if not exports.global:giveMoney(to, amount) then
+			return false, "Could not give cash to the recipient"
+		end
+		if not takeItemFromSlot(from, slot, false) then
+			if not exports.global:takeMoney(to, amount) then
+				outputDebugString("[item-system] Cash transfer rollback failed for item " .. tostring(itemIndex), 1)
+			end
+			return false, "Could not remove the cash item from the sender"
+		end
+		return true
+	end
+
+	local fromType, fromID = getType(from), tonumber(getID(from))
+	local toType, toID = getType(to), tonumber(getID(to))
+	if fromType == 255 or toType == 255 or not fromID or not toID then
+		return false, "Invalid inventory owner"
+	end
+	local query = mysql:query_free("UPDATE items SET type = " .. toType .. ", owner = " .. toID
+		.. " WHERE `index` = " .. tonumber(itemIndex) .. " AND type = " .. fromType .. " AND owner = " .. fromID)
+	if not query then return false, "MySQL-Query failed." end
+
+	table.remove(saveditems[from], slot)
+	saveditems[to][#saveditems[to] + 1] = { itemID, itemValue, itemIndex, protected, metadata }
+	notify(from, true)
+	notify(to, true)
+	if itemID == 115 or itemID == 116 then
+		if getElementType(from) == "player" then triggerEvent("updateLocalGuns", from) end
+		if getElementType(to) == "player" then triggerEvent("updateLocalGuns", to) end
+	end
+	return true
+end
 -- checks if the element has that specific item
 -- returns bool hasItem, int slot, int/string itemValue, int index, table/nil metadata
 function hasItem(element, itemID, itemValue)
