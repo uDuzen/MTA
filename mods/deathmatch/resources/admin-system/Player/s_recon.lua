@@ -33,7 +33,7 @@ function toggleMyNametag(thePlayer)
 	local username = getElementData(thePlayer, "account:username")
 	if exports.integration:isPlayerLeadAdmin(thePlayer) then
 		if (visible == true) then
-			setPlayerNametagShowing(thePlayer, false)
+			setPlayerNametagShowing(thePlayer, true)
 			--exports.anticheat:changeProtectedElementDataEx(thePlayer, "reconx", false, false)
 			outputChatBox("Your nametag is now visible.", thePlayer, 255, 0, 0)
 		elseif (visible == false or visible == nil) then
@@ -205,6 +205,7 @@ addEventHandler("admin:disabledisappear", root, function()
 	end
 	exports.anticheat:changeProtectedElementDataEx(player, "reconx", false, false)
 	exports.anticheat:changeProtectedElementDataEx(player, "invisible", false, false)
+	setElementAlpha(player, 255)
 	return true
 end)
 
