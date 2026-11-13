@@ -201,10 +201,23 @@ addEvent("bank:copyATMCardNumber", true)
 addEventHandler("bank:copyATMCardNumber", getRootElement(), copyATMCardNumber)
 
 ------------------------END ATM CARD SYSTEM----------------------------
-function saveBank( thePlayer )
-	if getElementData( thePlayer, "loggedin" ) == 1 then
-		mysql:query_free("UPDATE characters SET bankmoney=" .. mysql:escape_string((tonumber(getElementData( thePlayer, "bankmoney" )) or 0)) .. " WHERE id=" .. mysql:escape_string(getElementData( thePlayer, "dbid" )))
+function saveBank(thePlayer)
+	if not isElement(thePlayer) or getElementType(thePlayer) ~= "player"
+		or tonumber(getElementData(thePlayer, "loggedin")) ~= 1 then
+		return false
 	end
+	local characterID = tonumber(getElementData(thePlayer, "dbid"))
+	local bankBalance = tonumber(getElementData(thePlayer, "bankmoney"))
+	if not characterID or characterID < 1 or not bankBalance
+		or bankBalance ~= bankBalance or bankBalance == math.huge
+		or bankBalance < 0 or bankBalance ~= math.floor(bankBalance) then
+		return false
+	end
+	if not mysql:query_free("UPDATE characters SET bankmoney = " .. bankBalance .. " WHERE id = " .. characterID) then
+		return false
+	end
+	local saved = mysql:query_fetch_assoc("SELECT bankmoney FROM characters WHERE id = " .. characterID .. " LIMIT 1")
+	return saved and tonumber(saved.bankmoney) == bankBalance or false
 end
 
 function explode(div,str) -- credit: http://richard.warburton.it
