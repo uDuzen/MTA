@@ -854,48 +854,64 @@ function deleteAll(itemID, itemValue)
 end
 
 -- DELETE ALL ITEMS WITHIN AN INT - MAXIME
-function deleteAllItemsWithinInt( intID , dayOld, CLEANUPINT )
-	if not dayOld then dayOld = 0 end
-	-- make sure it's erased from the db
-	if intID then
-		local row = {}
-		local query2 = false
-		local success = false
-		if CLEANUPINT ~= "CLEANUPINT" then
-			query2 = mysql:query("SELECT `id` FROM `worlditems` WHERE `dimension` = '" .. mysql:escape_string( tostring( intID ) ) .. "' AND DATEDIFF(NOW(), creationdate) >= '"..mysql:escape_string( tostring( dayOld ) ) .."' AND `itemID` != 81 AND `itemID` != 103 AND protected = 0" )
-			if mysql:query_free("DELETE FROM `worlditems` WHERE `dimension` = '" .. mysql:escape_string( tostring( intID ) ) .. "' AND DATEDIFF(NOW(), creationdate) >= '"..mysql:escape_string( tostring( dayOld ) ) .."' AND `itemID` != 81 AND `itemID` != 103 AND protected = 0" ) then
-				success = true
-			end
-		else
-			query2 = mysql:query("SELECT `id` FROM `worlditems` WHERE `dimension` = '" .. mysql:escape_string( tostring( intID ) ) .. "'" )
-			if mysql:query_free("DELETE FROM `worlditems` WHERE `dimension` = '" .. mysql:escape_string( tostring( intID ) ) .. "'" ) then
-				success = true
-			end
-		end
-
-		if query2 then
-			while true do
-				local row = mysql:fetch_assoc(query2)
-				if not row then break end
-				for key, value in ipairs(getElementsByType("object", getResourceRootElement(getResourceFromName("item-world")))) do
-					if isElement( value ) then
-						if tonumber(getElementData( value, "id" )) == tonumber(row["id"]) then
-							destroyElement( value )
-						end
-					end
-				end
-			end
-			mysql:free_result(query2)
-		end
-
-		if success then
-			return true
-		else
-			return false
-		end
-	else
+function deleteAllItemsWithinInt(intID, dayOld, cleanupMode)
+	intID = tonumber(intID)
+	dayOld = tonumber(dayOld) or 0
+	if not intID or intID < 0 or intID ~= math.floor(intID)
+		or not dayOld or dayOld < 0 or dayOld > 36500
+		or dayOld ~= math.floor(dayOld) then
 		return false
 	end
+
+	local whereClause = "dimension = " .. intID
+	if cleanupMode ~= "CLEANUPINT" then
+		-- Preserve containers, keypad locks and other long-lived storage items during inactivity cleanup.
+		whereClause = whereClause .. " AND DATEDIFF(NOW(), creationdate) >= " .. dayOld
+			.. " AND itemID NOT IN (81, 103, 169, 223, 231) AND protected = 0"
+	end
+
+	local query = mysql:query("SELECT id FROM worlditems WHERE " .. whereClause)
+	if not query then
+		outputDebugString("[item-system] Failed to select world items for interior cleanup (dimension " .. intID .. ")", 1)
+		return false
+	end
+
+	local worldItemIDs = {}
+	while true do
+		local row = mysql:fetch_assoc(query)
+		if not row then break end
+		local worldItemID = tonumber(row.id)
+		if worldItemID and worldItemID > 0 and worldItemID == math.floor(worldItemID) then
+			worldItemIDs[#worldItemIDs + 1] = worldItemID
+		end
+	end
+	mysql:free_result(query)
+	if #worldItemIDs == 0 then return true end
+
+	-- Remove container inventories before deleting their world-item owners.
+	for _, worldItemID in ipairs(worldItemIDs) do
+		if not mysql:query_free("DELETE FROM items WHERE type = 3 AND owner = " .. worldItemID) then
+			outputDebugString("[item-system] Failed to clear contents of world item #" .. worldItemID .. "; world item cleanup aborted.", 1)
+			return false
+		end
+	end
+
+	if not mysql:query_free("DELETE FROM worlditems WHERE " .. whereClause) then
+		outputDebugString("[item-system] Failed to delete world item rows for interior dimension " .. intID, 1)
+		return false
+	end
+
+	local itemWorld = getResourceFromName("item-world")
+	local itemWorldRoot = itemWorld and getResourceRootElement(itemWorld)
+	if isElement(itemWorldRoot) then
+		local idLookup = {}
+		for _, worldItemID in ipairs(worldItemIDs) do idLookup[worldItemID] = true end
+		for _, object in ipairs(getElementsByType("object", itemWorldRoot)) do
+			local objectID = tonumber(getElementData(object, "id"))
+			if objectID and idLookup[objectID] then destroyElement(object) end
+		end
+	end
+	return true
 end
 
 -- CONVERSION
