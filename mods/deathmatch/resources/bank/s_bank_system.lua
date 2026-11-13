@@ -236,9 +236,13 @@ function transferMoneyToPersonal( fromFactionId, name, amount, reason )
 			local res, nums, _ = dbPoll( qh, 10000 )
 			if res then
 				if nums > 0 then
-					receiver = res[1]['id']
-					receiver_bank = res[1]['bankmoney']
+					receiver = tonumber(res[1]['id'])
+					receiver_bank = tonumber(res[1]['bankmoney'])
 					receiver_name = res[1]['charactername']
+					if not receiver or receiver < 1 or not receiver_bank or receiver_bank < 0
+						or receiver_bank + amount > 2000000000 then
+						return not outputChatBox("Recipient bank account is invalid or cannot accept this amount.", client, 255, 0, 0)
+					end
 
 					if tonumber(res[1]['account']) == tonumber(senderAccountID) then -- Uh oh... bad boy!
 						exports.global:sendWrnToStaff(exports.global:getPlayerFullIdentity(sender).." ("..getPlayerName(sender).." to "..receiver_name..") has attempted an ALT to ALT via bank transfer, but was stopped by script.", "ALT>ALT")
@@ -263,14 +267,25 @@ function transferMoneyToPersonal( fromFactionId, name, amount, reason )
 			if takeBankMoney( sender, amount ) then
 				-- if receiver_bank is not null then, receiver must be an offline player.
 				local credited = false
-				if receiver_bank then
-					credited = dbExec(exports.mysql:getConn("mta"), "UPDATE characters SET bankmoney = bankmoney + ? WHERE id = ?", amount, receiver)
+				if receiver_bank ~= nil then
+					credited = dbExec(exports.mysql:getConn("mta"),
+						"UPDATE characters SET bankmoney = bankmoney + ? WHERE id = ? AND bankmoney = ?",
+						amount, receiver, receiver_bank)
+					if credited then
+						local savedReceiver = mysql:query_fetch_assoc("SELECT bankmoney FROM characters WHERE id = " .. receiver .. " LIMIT 1")
+						credited = savedReceiver and tonumber(savedReceiver.bankmoney) == receiver_bank + amount or false
+					end
 				else
 					credited = giveBankMoney(receiver, amount)
 				end
 				if not credited then
-					giveBankMoney(sender, amount)
-					outputDebugString("[BANK] Transfer rolled back because the receiver could not be credited.")
+					local refunded = giveBankMoney(sender, amount)
+					if not refunded then
+						outputDebugString("[BANK] CRITICAL: transfer receiver credit failed and sender refund also failed.")
+						outputChatBox("Bank transfer rollback failed. Contact staff immediately.", client, 255, 0, 0)
+					else
+						outputDebugString("[BANK] Transfer rolled back because the receiver could not be credited.")
+					end
 					return false
 				end
 				
