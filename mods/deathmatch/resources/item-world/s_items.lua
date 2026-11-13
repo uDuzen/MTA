@@ -27,27 +27,35 @@ function createItem(id, itemID, itemValue, ...)
 end
 
 function updateItemValue(element, newValue)
-	if getElementParent(getElementParent(element)) == getResourceRootElement(getThisResource()) then
-		local id = tonumber(getElementData(element, "id")) or 0
-		if dbExec(mysql:getConn('mta'), "UPDATE `worlditems` SET `itemvalue`=? WHERE `id`=?",newValue,id) then
-			anticheat:changeProtectedElementDataEx(element, "itemValue", newValue)
-			return true
-		end
+	if not isElement(element) or getElementParent(getElementParent(element)) ~= getResourceRootElement(getThisResource())
+		or (type(newValue) ~= "string" and type(newValue) ~= "number") then return false end
+	newValue = tostring(newValue)
+	if #newValue > 1024 then return false end
+	local id = tonumber(getElementData(element, "id"))
+	if not id or id < 1 or id ~= math.floor(id) then return false end
+	if dbExec(mysql:getConn("mta"), "UPDATE worlditems SET itemvalue=? WHERE id=?", newValue, id) then
+		anticheat:changeProtectedElementDataEx(element, "itemValue", newValue)
+		return true
 	end
 	return false
 end
 
 function setData(element, key, value)
-	if getElementParent(getElementParent(element)) == getResourceRootElement(getThisResource()) then
-		local id = tonumber(getElementData(element, "id")) or 0
-		local metadata = getElementData(element, "metadata") or {}
-		metadata[key] = value
-
-		if dbExec(mysql:getConn('mta'), "UPDATE `worlditems` SET `metadata`=? WHERE `id`=?", toJSON(metadata), id) then
-			--anticheat:changeProtectedElementDataEx(element, "worlditemData."..tostring(key), value)
-			anticheat:changeProtectedElementDataEx(element, "metadata", metadata)
-			return true
-		end
+	if not isElement(element) or getElementParent(getElementParent(element)) ~= getResourceRootElement(getThisResource())
+		or type(key) ~= "string" or #key < 1 or #key > 64 then return false end
+	local id = tonumber(getElementData(element, "id"))
+	if not id or id < 1 or id ~= math.floor(id) then return false end
+	local metadata = {}
+	local current = getElementData(element, "metadata")
+	if type(current) == "table" then
+		for metadataKey, metadataValue in pairs(current) do metadata[metadataKey] = metadataValue end
+	end
+	metadata[key] = value
+	local encoded = toJSON(metadata)
+	if type(encoded) ~= "string" or #encoded > 8192 then return false end
+	if dbExec(mysql:getConn("mta"), "UPDATE worlditems SET metadata=? WHERE id=?", encoded, id) then
+		anticheat:changeProtectedElementDataEx(element, "metadata", metadata)
+		return true
 	end
 	return false
 end
@@ -61,15 +69,29 @@ function getData(element, key)
 end
 
 function setPermissions(element, permissions)
-	if getElementParent(getElementParent(element)) == getResourceRootElement(getThisResource()) then
-		local id = tonumber(getElementData(element, "id")) or 0
-		result = mysql:query_free("UPDATE `worlditems` SET `perm_use`='"..mysqL:escape_string(tostring(permissions.use)).."', `perm_move`='"..mysqL:escape_string(tostring(permissions.move)).."', `perm_pickup`='"..mysqL:escape_string(tostring(permissions.pickup)).."', `perm_use_data`='"..mysqL:escape_string(tostring(toJSON(permissions.useData))).."', `perm_move_data`='"..mysqL:escape_string(tostring(toJSON(permissions.moveData))).."', `perm_pickup_data`='"..mysqL:escape_string(tostring(toJSON(permissions.pickupData))).."' WHERE `id`='"..mysql:escape_string(tostring(id)).."'")
-		if result then
-			anticheat:changeProtectedElementDataEx(element, "worlditem.permissions", permissions)
-			return true
-		end
-	end
-	return false
+	if not isElement(element) or getElementParent(getElementParent(element)) ~= getResourceRootElement(getThisResource())
+		or type(permissions) ~= "table" then return false end
+	local id = tonumber(getElementData(element, "id"))
+	if not id or id < 1 or id ~= math.floor(id) then return false end
+	local use, move, pickup = tonumber(permissions.use), tonumber(permissions.move), tonumber(permissions.pickup)
+	if not use or not move or not pickup
+		or use < 0 or use > 8 or move < 0 or move > 8 or pickup < 0 or pickup > 8
+		or use ~= math.floor(use) or move ~= math.floor(move) or pickup ~= math.floor(pickup) then return false end
+	local useData = type(permissions.useData) == "table" and permissions.useData or {}
+	local moveData = type(permissions.moveData) == "table" and permissions.moveData or {}
+	local pickupData = type(permissions.pickupData) == "table" and permissions.pickupData or {}
+	local useJSON, moveJSON, pickupJSON = toJSON(useData), toJSON(moveData), toJSON(pickupData)
+	if type(useJSON) ~= "string" or type(moveJSON) ~= "string" or type(pickupJSON) ~= "string"
+		or #useJSON > 8192 or #moveJSON > 8192 or #pickupJSON > 8192 then return false end
+	local result = dbExec(mysql:getConn("mta"),
+		"UPDATE worlditems SET perm_use=?, perm_move=?, perm_pickup=?, perm_use_data=?, perm_move_data=?, perm_pickup_data=? WHERE id=?",
+		use, move, pickup, useJSON, moveJSON, pickupJSON, id)
+	if not result then return false end
+	anticheat:changeProtectedElementDataEx(element, "worlditem.permissions", {
+		use = use, move = move, pickup = pickup,
+		useData = useData, moveData = moveData, pickupData = pickupData
+	})
+	return true
 end
 
 function getPermissions(element)
@@ -85,20 +107,28 @@ function getPermissions(element)
 end
 
 function getPermissionsFromDB(element)
-	if getElementParent(getElementParent(element)) ~= getResourceRootElement(getThisResource()) then
+	if not isElement(element) or getElementParent(getElementParent(element)) ~= getResourceRootElement(getThisResource()) then
 		return false
 	end
-	id = tonumber(getElementData(element, "id")) or 0
-	if id < 1 then return false end
-	local permissions
-	local result = mysql:query("SELECT `perm_use`, `perm_move`, `perm_pickup`, `perm_use_data`, `perm_move_data`, `perm_pickup_data` FROM `worlditems` WHERE `id`='"..mysql:escape_string(tostring(id)).."' LIMIT 1")
-	while true do
-		local row = mysql:fetch_assoc(result)
-		if not row then break end
-		permissions = { use = tonumber(row.perm_use), move = tonumber(row.perm_move), pickup = tonumber(row.perm_pickup), useData = fromJSON(row.perm_use_data), moveData = fromJSON(row.perm_move_data), pickupData = fromJSON(row.perm_pickup_data) }
-	end
-	anticheat:changeProtectedElementDataEx(element, "worlditem.permissions", permissions)
+	local id = tonumber(getElementData(element, "id"))
+	if not id or id < 1 or id ~= math.floor(id) then return false end
+	local result = mysql:query("SELECT perm_use, perm_move, perm_pickup, perm_use_data, perm_move_data, perm_pickup_data FROM worlditems WHERE id = " .. id .. " LIMIT 1")
+	if not result then return false end
+	local row = mysql:fetch_assoc(result)
 	mysql:free_result(result)
+	if not row then return false end
+	local permissions = {
+		use = tonumber(row.perm_use) or 1,
+		move = tonumber(row.perm_move) or 1,
+		pickup = tonumber(row.perm_pickup) or 1,
+		useData = type(row.perm_use_data) == "string" and fromJSON(row.perm_use_data) or {},
+		moveData = type(row.perm_move_data) == "string" and fromJSON(row.perm_move_data) or {},
+		pickupData = type(row.perm_pickup_data) == "string" and fromJSON(row.perm_pickup_data) or {}
+	}
+	if type(permissions.useData) ~= "table" then permissions.useData = {} end
+	if type(permissions.moveData) ~= "table" then permissions.moveData = {} end
+	if type(permissions.pickupData) ~= "table" then permissions.pickupData = {} end
+	anticheat:changeProtectedElementDataEx(element, "worlditem.permissions", permissions)
 	return permissions
 end
 
@@ -107,33 +137,47 @@ local function sqlDeleteObject( dbid )
 end
 
 -- delete an object by dbid, return true of deleted something, false otherwise.
-function deleteOne( dbid, no_sql ) 
-	local destroyed = false
-	local object = exports.pool:getElement( 'object', dbid )
-	if object then
-		destroyed = destroyElement( object ) 
-		if destroyed and not no_sql then
-			dbExec( exports.mysql:getConn('mta'), "DELETE FROM worlditem WHERE id=? ", dbid )
-		end
+function deleteOne(dbid, no_sql)
+	local id = tonumber(dbid)
+	if not id or id < 1 or id ~= math.floor(id) then return false end
+	local object = exports.pool:getElement("object", id)
+	if not isElement(object) then return false end
+	if not no_sql and not dbExec(exports.mysql:getConn("mta"), "DELETE FROM worlditems WHERE id=? LIMIT 1", id) then
+		return false
 	end
-	return destroyed
+	return destroyElement(object)
 end
 
--- nil value will delete all itemss with given itemId, return number of objects deleted.
-function deleteAll( id, value, no_sql ) 
-	local count = 0
-	for k, o in pairs( getElementsByType( "object", resourceRoot ) ) do
-		local id_ = getElementData( o, "itemID" )
-		if id_ == id then
-			local value_ = getElementData( o, "itemValue" )
-			if not value or ( tonumber(value) or value ) == ( tonumber(value_) or value_ ) then
-				destroyElement( o )
-				count = count + 1
-			end
+function deleteAll(id, value, no_sql)
+	id = tonumber(id)
+	if not id or id < 1 or id ~= math.floor(id) then return 0 end
+	local normalizedValue = value ~= nil and tostring(value) or nil
+	local matchingObjects = {}
+	for _, object in ipairs(getElementsByType("object", resourceRoot)) do
+		local objectItemID = tonumber(getElementData(object, "itemID"))
+		local objectValue = getElementData(object, "itemValue")
+		if objectItemID == id and (normalizedValue == nil or tostring(objectValue) == normalizedValue) then
+			matchingObjects[#matchingObjects + 1] = object
 		end
 	end
-	if count > 0 and not no_sql then
-		dbExec( exports.mysql:getConn('mta'), "DELETE FROM worlditems WHERE itemid=? "..( value and "AND itemvalue=? " or "" ) , id, value or nil )
+	if #matchingObjects == 0 then return 0 end
+
+	if not no_sql then
+		local querySucceeded
+		if normalizedValue ~= nil then
+			querySucceeded = dbExec(exports.mysql:getConn("mta"), "DELETE FROM worlditems WHERE itemid=? AND itemvalue=?", id, normalizedValue)
+		else
+			querySucceeded = dbExec(exports.mysql:getConn("mta"), "DELETE FROM worlditems WHERE itemid=?", id)
+		end
+		if not querySucceeded then
+			outputDebugString("[item-world] deleteAll database operation failed for item ID " .. id, 1)
+			return 0
+		end
 	end
-	return count
+
+	local deleted = 0
+	for _, object in ipairs(matchingObjects) do
+		if isElement(object) and destroyElement(object) then deleted = deleted + 1 end
+	end
+	return deleted
 end
