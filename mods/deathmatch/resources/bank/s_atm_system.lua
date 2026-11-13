@@ -661,227 +661,128 @@ end
 addEvent("bank:depositATMMoneyPersonal", true)
 addEventHandler("bank:depositATMMoneyPersonal", getRootElement(), depositATMMoneyPersonal)
 
-function transferATMMoneyToPersonal(theATM, amount,targetBankAccNo, reason)
+function transferATMMoneyToPersonal(theATM, amount, targetBankAccNo, reason)
 	local player = client
 	amount = validateATMAmount(amount)
 	if not player or not amount or not validateATMInteraction(player, theATM)
-		or type(targetBankAccNo) ~= "string" or #targetBankAccNo < 1 or #targetBankAccNo > 32
-		or targetBankAccNo:find("[%c]") then return false end
-	if reason ~= nil and (type(reason) ~= "string" or #reason > 128 or reason:find("[%c]")) then return false end
-	local state = tonumber(getElementData(client, "loggedin")) or 0
-	if (state == 0) then
+		or type(targetBankAccNo) ~= "string" or #targetBankAccNo < 1
+		or #targetBankAccNo > 64 or targetBankAccNo:find("[%c]") then
+		return false
+	end
+	if reason ~= nil and (type(reason) ~= "string" or #reason > 128 or reason:find("[%c]")) then
+		return false
+	end
+	reason = reason or ""
+
+	local atmCard = getATMCardFromATMMachine(theATM)
+	if type(atmCard) ~= "table" or tonumber(atmCard[1]) ~= 150 then
+		triggerClientEvent(player, "bank:respondToPendingTransfer", player, "ATM Machine is not working properly. Please reinsert your card.")
+		return false
+	end
+	local cardOwner, cardNumber, cardOwnerID, limitType = getCardInfo(atmCard)
+	local sender = fetchATMCardOwner(cardNumber)
+	if not sender or tonumber(cardOwnerID) ~= sender.id then
+		triggerClientEvent(player, "bank:respondToPendingTransfer", player, "The ATM card is invalid or disabled. Please contact the bank.")
 		return false
 	end
 
-	if not reason then
-		reason = ""
-	end
-
-	local foundAnATMCard = getATMCardFromATMMachine(theATM)
-	if not foundAnATMCard then
-		triggerClientEvent( client, "bank:respondToPendingTransfer", client, "ATM Machine is not working properly!", "This is really weird, the card you've just inserted, It's gone magically!")
+	local withinLimit, limitReason = isThisTransactionWithinLimitation(cardNumber, amount, limitType)
+	if not withinLimit then
+		triggerClientEvent(player, "bank:respondToPendingTransfer", player, limitReason)
 		return false
 	end
 
-	local cardOwner, cardNumber, cardOwnerCharID, limitType = getCardInfo(foundAnATMCard)
-	local isThisTransactionWithinLimitation, reason2 = isThisTransactionWithinLimitation(cardNumber,amount, limitType)
-	if not isThisTransactionWithinLimitation then
-		triggerClientEvent( client, "bank:respondToPendingTransfer", client, reason2)
+	local senderElement = exports.pool:getElement("playerByDbid", sender.id)
+	if isElement(senderElement) and tonumber(getElementData(senderElement, "bankmoney")) ~= sender.balance then
+		triggerClientEvent(player, "bank:respondToPendingTransfer", player, "The sender account balance changed. Please try again.")
 		return false
 	end
 
-	local faction = getTeamFromName(targetBankAccNo:gsub("_", " "))
-
-	if cardNumber == targetBankAccNo then
-		triggerClientEvent( client, "bank:respondToPendingTransfer", client, "You can not transfer money to yourself.")
-		return false
-	end
-
-	if faction then
-		local target_ownerName, target_bankmoney = nil
-		local sender_ownerName, sender_id, sender_bankmoney = nil
-		local target_id = getElementData(faction, "id") and -getElementData(faction, "id")
-
-		--TAKE SENDER's ATM CARD's MONEY
-		local cardOwnerElement = nil
-		local senderBankOwnerQuery = mysql:query_fetch_assoc("SELECT `bankmoney`, id, charactername FROM `characters` LEFT JOIN `atm_cards` ON `characters`.`id`=`atm_cards`.`card_owner` WHERE `card_number`='"..cardNumber.."' AND `card_locked`='0' AND card_type='1' ")
-		if not senderBankOwnerQuery or not senderBankOwnerQuery["bankmoney"] then
-			triggerClientEvent( client, "bank:respondToPendingTransfer", client, "Error code g23452 occurred, please report on forums.")
-			return false
-		else
-			sender_ownerName = senderBankOwnerQuery["charactername"]
-			sender_id = senderBankOwnerQuery["id"]
-			sender_bankmoney = tonumber(senderBankOwnerQuery["bankmoney"])
-			cardOwnerElement = exports.pool:getElement("playerByDbid", tonumber(sender_id))
-		end
-
-		local tookSenderMoney = false
-
-		if cardOwnerElement then
-			if getElementData(cardOwnerElement, "bankmoney") ~= sender_bankmoney then
-				triggerClientEvent( client, "bank:respondToPendingTransfer", client, "Transaction failed. Try again.", true)
-				return false
-			end
-			if takeBankMoney(cardOwnerElement, amount) then
-				tookSenderMoney = true
-				outputDebugString("[BANK] "..getPlayerName(client).." is transferring $"..amount.." from "..cardNumber.."/"..sender_ownerName.." (Online)")
-			else
-				triggerClientEvent( client, "bank:respondToPendingTransfer", client, "ATM Card Number '"..cardNumber.."' (Owner: '"..no_(sender_ownerName).."') doesn't have enough funds.", true)
-				return false
-			end
-		else
-			if sender_bankmoney - amount < 0 then
-				triggerClientEvent( client, "bank:respondToPendingTransfer", client, "ATM Card Number '"..cardNumber.."' (Owner: '"..no_(sender_ownerName).."') doesn't have enough funds.", true)
-				return false
-			end
-			if updateBankMoney(client, sender_id, amount, "minus") then
-				outputDebugString("[BANK] "..getPlayerName(client).." is transferring $"..amount.." from "..cardNumber.."/"..sender_ownerName.." (Offline)")
-				tookSenderMoney = true
-			end
-		end
-
-
-
-		if tookSenderMoney then
-			giveBankMoney(faction, amount)
-			outputDebugString("[BANK] "..getPlayerName(client).." is transferring $"..amount.." to "..getTeamName(faction).." (Online)")
-		else
-			outputDebugString("SQL error code GvddGh4")
-			outputChatBox("SQL error code GvddGh4", client)
-			triggerEvent("bank:ejectATMCard", client, theATM)
-			return false
-		end
-
-		addTransactionLimit(cardNumber, amount, limitType)
-
-		local teamName = getTeamName(faction):gsub("_", " ")
-		triggerClientEvent( client, "bank:respondToPendingTransfer", client, "You've successfully transferred $" .. exports.global:formatMoney(amount) .. " to '"..teamName.."'.", true)
-
-		local atmName = getATMName(theATM)
-		addBankTransactionLog(sender_id, target_id, amount, 2,  reason,"Transferred from "..atmName, cardNumber, targetBankAccNo)
-		exports.logs:dbLog(client, 25, client, "TRANSFERRED $" .. amount.." FROM ("..no_(cardOwner)..", "..cardNumber..") TO ("..teamName..") REASON ("..reason..", "..atmName..")")
-
-		triggerEvent("bank:ejectATMCard", client, theATM)
-
-		return true
+	local targetFaction = getTeamFromName(targetBankAccNo:gsub("_", " "))
+	local target, targetElement, targetID, targetName, targetBalance
+	if targetFaction and isElement(targetFaction) then
+		targetID = tonumber(getElementData(targetFaction, "id"))
+		if not targetID or targetID < 1 then return false end
+		targetName = getTeamName(targetFaction)
+		target = targetFaction
 	else
-
-		local target_ownerName, target_id, target_bankmoney = nil
-		local sender_ownerName, sender_id, sender_bankmoney = nil
-
-		--TAKE SENDER's ATM CARD's MONEY
-		local cardOwnerElement = nil
-		local senderBankOwnerQuery = mysql:query_fetch_assoc("SELECT `bankmoney`, id, charactername FROM `characters` LEFT JOIN `atm_cards` ON `characters`.`id`=`atm_cards`.`card_owner` WHERE `card_number`='"..cardNumber.."' AND `card_locked`='0' AND card_type='1' ")
-		if not senderBankOwnerQuery or not senderBankOwnerQuery["bankmoney"] then
-			triggerClientEvent( client, "bank:respondToPendingTransfer", client, "Error code g2345 occurred, please report on forums.")
+		if not validateATMCardNumber(targetBankAccNo) then
+			triggerClientEvent(player, "bank:respondToPendingTransfer", player, "The target ATM card number is invalid.")
 			return false
-		else
-			sender_ownerName = senderBankOwnerQuery["charactername"]
-			sender_id = senderBankOwnerQuery["id"]
-			sender_bankmoney = tonumber(senderBankOwnerQuery["bankmoney"])
-			cardOwnerElement = exports.pool:getElement("playerByDbid", tonumber(sender_id))
 		end
-
-		if cardOwnerElement then
-			if getElementData(cardOwnerElement, "bankmoney") ~= sender_bankmoney then
-				triggerClientEvent( client, "bank:respondToPendingTransfer", client, "Transaction failed. Try again.", true)
-				return false
-			end
-			if not hasBankMoney(cardOwnerElement, amount) then
-				triggerClientEvent( client, "bank:respondToPendingTransfer", client, "ATM Card Number '"..cardNumber.."' (Owner: '"..no_(sender_ownerName).."') doesn't have enough funds.", true)
-				return false
-			end
-		else
-			if sender_bankmoney - amount < 0 then
-				triggerClientEvent( client, "bank:respondToPendingTransfer", client, "ATM Card Number '"..cardNumber.."' (Owner: '"..no_(sender_ownerName).."') doesn't have enough funds.", true)
-				return false
-			end
-		end
-
-
-
-		local targetElement = nil
-		local targetBankOwnerQuery = mysql:query_fetch_assoc("SELECT id, `charactername`, bankmoney FROM `characters` LEFT JOIN `atm_cards` ON `characters`.`id`=`atm_cards`.`card_owner` WHERE `atm_cards`.`card_number`='"..toSQL(targetBankAccNo).."' AND `card_locked`='0' AND card_type='1' ")
-		if not targetBankOwnerQuery or not targetBankOwnerQuery["charactername"] then
-			triggerClientEvent( client, "bank:respondToPendingTransfer", client, "Target Bank Account Number does not exist or is disabled! Please check again and retry.")
+		target = fetchATMCardOwner(targetBankAccNo)
+		if not target then
+			triggerClientEvent(player, "bank:respondToPendingTransfer", player, "Target bank account does not exist or is disabled.")
 			return false
-		else
-			target_ownerName = targetBankOwnerQuery["charactername"]
-			target_id = targetBankOwnerQuery["id"]
-			target_bankmoney = tonumber(targetBankOwnerQuery["bankmoney"])
-			targetElement = exports.pool:getElement("playerByDbid", tonumber(target_id))
 		end
-
-		if targetElement then
-			if getElementData(targetElement, "bankmoney") ~= target_bankmoney then
-				triggerClientEvent( client, "bank:respondToPendingTransfer", client, "Transaction failed. Try again.", true)
-				return false
-			end
+		if target.id == sender.id then
+			triggerClientEvent(player, "bank:respondToPendingTransfer", player, "You cannot transfer money to the same account.")
+			return false
 		end
-
-		local checkingResult = areYouAltAlting(client, { cardOwner, cardNumber, cardOwnerCharID}, target_id )
-		if checkingResult == "between alts" then
-			exports.global:sendMessageToAdmins("[BANK] ("..getElementData(client, "playerid")..") "..tostring(getPlayerName(client)):gsub("_"," ").." - "..getElementData(client, "account:username").." attempted to transfer $"..exports.global:formatMoney(amount).." to another ATM card owned by his alt.")
-			triggerClientEvent( client, "bank:respondToPendingTransfer", client, "You can not transfer money between your own characters. Using other ATM card to gain this purpose may get yourself a permanent ban.", true)
+		local altCheck = areYouAltAlting(player, { cardOwner, cardNumber, sender.id }, target.id)
+		if altCheck then
+			exports.global:sendMessageToAdmins("[BANK] " .. getPlayerName(player) .. " attempted an ATM transfer to an alternate character's card (" .. tostring(altCheck) .. ").")
+			triggerClientEvent(player, "bank:respondToPendingTransfer", player, "You cannot transfer money between your own characters.")
 			disableATMCard(cardNumber)
 			exports["item-system"]:clearItems(theATM)
 			return false
 		end
-
-		if checkingResult == "between chars over the same ip" then
-			exports.global:sendMessageToAdmins("[BANK] ("..getElementData(client, "playerid")..") "..tostring(getPlayerName(client)):gsub("_"," ").." - "..getElementData(client, "account:username").." attempted to transfer $"..exports.global:formatMoney(amount).." to another ATM card owned by a character in his other account on the same IP address.")
-			triggerClientEvent( client, "bank:respondToPendingTransfer", client, "You can not transfer money between your own characters. Using other ATM card to gain this purpose may get yourself a permanent ban.", true)
-			disableATMCard(cardNumber)
-			exports["item-system"]:clearItems(theATM)
+		targetID, targetName, targetBalance = target.id, target.name, target.balance
+		targetElement = exports.pool:getElement("playerByDbid", target.id)
+		if isElement(targetElement) and tonumber(getElementData(targetElement, "bankmoney")) ~= target.balance then
+			triggerClientEvent(player, "bank:respondToPendingTransfer", player, "The recipient account balance changed. Please try again.")
 			return false
 		end
-
-		if checkingResult == "between chars over the same mtaserial" then
-			exports.global:sendMessageToAdmins("[BANK] ("..getElementData(client, "playerid")..") "..tostring(getPlayerName(client)):gsub("_"," ").." - "..getElementData(client, "account:username").." attempted  transfer $"..exports.global:formatMoney(amount).." to another ATM card owned by a character in his other account on the same MTA Serial.")
-			triggerClientEvent( client, "bank:respondToPendingTransfer", client, "You can not transfer money between your own characters. Using other ATM card to gain this purpose may get yourself a permanent ban.", true)
-			disableATMCard(cardNumber)
-			exports["item-system"]:clearItems(theATM)
+		if target.balance + amount > 2000000000 then
+			triggerClientEvent(player, "bank:respondToPendingTransfer", player, "The recipient's bank account cannot accept that amount.")
 			return false
 		end
-
-		local takeSenderMoney = false
-		if cardOwnerElement then
-		 	if takeBankMoney(cardOwnerElement, amount) then
-		 		outputDebugString("[BANK] "..getPlayerName(client).." is transferring $"..amount.." from "..cardNumber.."/"..cardOwner.." (Online)")
-		 		takeSenderMoney = true
-		 	else
-		 		if updateBankMoney(client, sender_id, amount, "minus") then
-		 			outputDebugString("[BANK] "..getPlayerName(client).." is transferring $"..amount.." from "..cardNumber.."/"..cardOwner.." (Offline)")
-		 			takeSenderMoney = true
-		 		end
-		 	end
-		end
-
-		if takeSenderMoney then
-			if targetElement then
-				if giveBankMoney(targetElement, amount) then
-					outputDebugString("[BANK] "..getPlayerName(client).." is transferring $"..amount.." to "..targetBankAccNo.."/"..target_ownerName.." (Online)")
-				end
-			else
-				if updateBankMoney(client, target_id, amount, "plus") then
-					outputDebugString("[BANK] "..getPlayerName(client).." is transferring $"..amount.." to "..targetBankAccNo.."/"..target_ownerName.." (Offline)")
-				end
-			end
-		else
-			triggerClientEvent( client, "bank:respondToPendingTransfer", client, "Transaction failed. Try again.", true)
-			return false
-		end
-
-		addTransactionLimit(cardNumber, amount, limitType)
-
-		triggerClientEvent( client, "bank:respondToPendingTransfer", client, "You've successfully transferred $" .. exports.global:formatMoney(amount) .. " to ATM Card '"..targetBankAccNo.."' (Owner: '"..no_(target_ownerName).."') ", true)
-		triggerEvent("bank:ejectATMCard", client, theATM)
-
-		local atmName = getATMName(theATM)
-		addBankTransactionLog(sender_id, target_id, amount, 2,  reason,"Transferred from "..atmName, cardNumber, targetBankAccNo)
-		exports.logs:dbLog(client, 25, client, "TRANSFERRED $" .. amount.." FROM ("..no_(cardOwner)..", "..cardNumber..") TO ("..no_(target_ownerName)..", "..targetBankAccNo..", $".. (target_bankmoney + amount) ..") REASON ("..reason..", "..atmName..")")
-		return true
 	end
+
+	if sender.balance < amount then
+		triggerClientEvent(player, "bank:respondToPendingTransfer", player, "The source ATM card does not have enough funds.")
+		return false
+	end
+
+	local sourceDebited = adjustATMCardOwnerBalance(player, sender.id,
+		isElement(senderElement) and senderElement or nil, amount, "minus")
+	if not sourceDebited then
+		triggerClientEvent(player, "bank:respondToPendingTransfer", player, "The source account could not be debited. Please try again.")
+		return false
+	end
+
+	local targetCredited
+	if targetFaction then
+		targetCredited = exports.global:giveMoney(targetFaction, amount) == true
+	else
+		targetCredited = adjustATMCardOwnerBalance(player, target.id,
+			isElement(targetElement) and targetElement or nil, amount, "plus")
+	end
+
+	if not targetCredited then
+		local sourceRefunded = adjustATMCardOwnerBalance(player, sender.id,
+			isElement(senderElement) and senderElement or nil, amount, "plus")
+		if not sourceRefunded then
+			outputDebugString("[BANK] Failed to roll back ATM transfer debit from source card " .. cardNumber, 1)
+			outputChatBox("The transfer failed and the source account refund could not be completed. Contact staff immediately.", player, 255, 0, 0)
+		else
+			triggerClientEvent(player, "bank:respondToPendingTransfer", player, "The recipient account could not be credited. Your transfer was cancelled.")
+		end
+		return false
+	end
+
+	addTransactionLimit(cardNumber, amount, limitType)
+	local targetLabel = targetFaction and getTeamName(targetFaction):gsub("_", " ") or (targetName or "Unknown")
+	local atmName = getATMName(theATM)
+	local destinationAccountID = targetFaction and -targetID or targetID
+	addBankTransactionLog(sender.id, destinationAccountID, amount, 2, reason,
+		"Transferred from " .. atmName, cardNumber, targetFaction and nil or targetBankAccNo)
+	exports.logs:dbLog(player, 25, player,
+		"TRANSFERRED $" .. amount .. " FROM (" .. sender.name .. ", " .. cardNumber .. ") TO (" .. targetLabel .. ") REASON (" .. reason .. ", " .. atmName .. ")")
+	triggerClientEvent(player, "bank:respondToPendingTransfer", player,
+		"You successfully transferred $" .. exports.global:formatMoney(amount) .. " to '" .. targetLabel .. "'.", true)
+	triggerEvent("bank:ejectATMCard", player, theATM)
+	return true
 end
 addEvent("bank:transferATMMoneyToPersonal", true)
 addEventHandler("bank:transferATMMoneyToPersonal", getRootElement(), transferATMMoneyToPersonal)
