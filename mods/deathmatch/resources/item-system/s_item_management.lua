@@ -69,10 +69,10 @@ function updateProtection(item, faction, slot, element)
 end
 
 -- Free Items Table as necessary
-local function destroyInventory( element )
+local function destroyInventory(element)
 	saveditems[element] = nil
-	notify( element )
-
+	-- Do not reload the inventory while the element is being destroyed or changing characters.
+	notify(element, true)
 
 	-- clear subscriptions
 	for key, value in pairs( subscribers ) do
@@ -174,54 +174,68 @@ local function getType(element)
 end
 
 -- loads all items for that element
-function loadItems( element, force )
-	if not isElement( element ) then
+function loadItems(element, force)
+	if not isElement(element) then
 		return false, "No element"
-	elseif getType(element) == 255 or not tonumber(getID(element))
-		or tonumber(getID(element)) ~= tonumber(getID(element))
-		or tonumber(getID(element)) == math.huge or tonumber(getID(element)) ~= math.floor(tonumber(getID(element))) then
+	end
+	local elementType = getType(element)
+	local elementID = tonumber(getID(element))
+	if elementType == 255 or not elementID or elementID ~= elementID
+		or elementID == math.huge or elementID == -math.huge
+		or elementID ~= math.floor(elementID) then
 		return false, "Invalid Element ID"
-	elseif force or not saveditems[ element ] then
-		saveditems[ element ] = {}
-		--notify( element )
-		local elementID = tonumber(getID(element))
-		local elementType = getType(element)
-		local result = mysql:query( "SELECT * FROM items WHERE type = " .. elementType .. " AND owner = " .. elementID .. " ORDER BY `index` ASC" )
-		if result then
-			local count = 0
-			repeat
-				local row = mysql:fetch_assoc(result)
-				if row then
-					count = count + 1
-					saveditems[element][count] = {
-						tonumber( row.itemID ),
-						tonumber( row.itemValue ) or row.itemValue,
-						tonumber( row.index ),
-						tonumber( row.protected ),
-						row.metadata ~= mysql_null() and fromJSON(row.metadata) or nil
-					}
-				end
-			until not row
-			mysql:free_result(result)
+	end
 
-			if not subscribers[ element ] then
-				subscribers[ element ] = {}
-				if getElementType( element ) == "player" then
-					subscribers[ element ][ element ] = true
-				end
-			end
-			notify( element, true )
-			if (getElementType(element) == 'player') then
-				triggerEvent("updateLocalGuns", element)
-			end
-			return true
-		else
+	if force or not saveditems[element] then
+		local result = mysql:query("SELECT * FROM items WHERE type = " .. elementType
+			.. " AND owner = " .. elementID .. " ORDER BY `index` ASC")
+		if not result then
 			saveditems[element] = nil
 			return false, "MySQL-Error"
 		end
-	else
+
+		local loadedItems = {}
+		local count = 0
+		repeat
+			local row = mysql:fetch_assoc(result)
+			if row then
+				local itemID = tonumber(row.itemID)
+				local itemValue = tonumber(row.itemValue) or row.itemValue
+				local itemIndex = tonumber(row.index)
+				local protected = tonumber(row.protected) or 0
+				local metadata
+				if row.metadata and row.metadata ~= mysql_null() and type(row.metadata) == "string" then
+					local decoded = fromJSON(row.metadata)
+					if type(decoded) == "table" then metadata = decoded end
+				end
+
+				if itemID and itemID >= 1 and itemID <= 1000 and itemID == math.floor(itemID)
+					and itemValue ~= nil and itemIndex and itemIndex >= 1
+					and itemIndex == math.floor(itemIndex) then
+					count = count + 1
+					loadedItems[count] = { itemID, itemValue, itemIndex, protected, metadata }
+				else
+					outputDebugString("[item-system] Skipped invalid inventory row (owner " .. tostring(elementID)
+						.. ", index " .. tostring(row.index) .. ")", 1)
+				end
+			end
+		until not row
+		mysql:free_result(result)
+
+		saveditems[element] = loadedItems
+		if not subscribers[element] then
+			subscribers[element] = {}
+			if getElementType(element) == "player" then
+				subscribers[element][element] = true
+			end
+		end
+		notify(element, true)
+		if getElementType(element) == "player" then
+			triggerEvent("updateLocalGuns", element)
+		end
 		return true
 	end
+	return true
 end
 
 -- load items for all logged in players on resource start
