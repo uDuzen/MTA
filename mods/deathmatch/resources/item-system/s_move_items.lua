@@ -105,9 +105,26 @@ function x_output_wrapper( ... ) return output( ... ) end
 
 
 
-local function moveToElement( element, slot, ammo, event )
+local function moveToElement(element, slot, ammo, event)
 	if not client or not isElement(element) then return false end
 	local source = client
+	slot = tonumber(slot)
+	if event ~= nil and event ~= "finishItemMove" and event ~= "forceElementMoveUpdate" then event = "finishItemMove" end
+	if not slot or slot ~= math.floor(slot) then
+		triggerClientEvent(source, "finishItemMove", source)
+		return false
+	end
+	if ammo then
+		ammo = tonumber(ammo)
+		if not ammo or ammo ~= ammo or ammo == math.huge or ammo < 0 or ammo > 10000 or ammo ~= math.floor(ammo)
+			or (slot ~= -100 and (slot < 1 or slot > 12)) then
+			triggerClientEvent(source, "finishItemMove", source)
+			return false
+		end
+	elseif slot < 1 then
+		triggerClientEvent(source, "finishItemMove", source)
+		return false
+	end
 	if not canAccessElement( source, element ) then
 		outputChatBox("You cannot access this inventory at the moment.", source, 255, 0, 0)
 		triggerClientEvent( source, event or "finishItemMove", source )
@@ -519,9 +536,14 @@ addEventHandler( "moveWorldItemToElement", getRootElement(), moveWorldItemToElem
 
 --
 
-local function moveFromElement( element, slot, ammo, index )
+local function moveFromElement(element, slot, ammo, index)
 	if not client or not isElement(element) then return false end
 	local source = client
+	slot = tonumber(slot)
+	if not slot or slot < 1 or slot ~= math.floor(slot) then
+		triggerClientEvent(source, "finishItemMove", source)
+		return false
+	end
 	if false then
 		return outputDebugString("[ITEM] moveFromElement / Disabled ")
 	end
@@ -539,7 +561,13 @@ local function moveFromElement( element, slot, ammo, index )
 		outputChatBox("You can not move this item. Contact an admin via F1.", source, 255, 0, 0)
 		return
 	end
-
+	if item[1] < 0 or item[1] == -100 then
+		ammo = tonumber(ammo)
+		if not ammo or ammo ~= ammo or ammo == math.huge or ammo < 0 or ammo > 10000 or ammo ~= math.floor(ammo) then
+			triggerClientEvent(source, "finishItemMove", source)
+			return false
+		end
+	end
 
 	local name = getName(element)
 
