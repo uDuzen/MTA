@@ -521,7 +521,14 @@ local function updateBankBalance(thePlayer, accountType, accountID, balanceKey, 
 		.. " WHERE id = " .. accountID .. " AND `" .. columnName .. "` = " .. oldBalance) then
 		return false
 	end
-	if getStoredBankBalance(accountType, accountID) ~= newBalance then
+	local verifiedBalance = getStoredBankBalance(accountType, accountID)
+	if verifiedBalance ~= newBalance then
+		if verifiedBalance == false then
+			if not mysql:query_free("UPDATE `" .. tableName .. "` SET `" .. columnName .. "` = " .. oldBalance
+				.. " WHERE id = " .. accountID .. " AND `" .. columnName .. "` = " .. newBalance) then
+				outputDebugString("[BANK] Failed to roll back an unverified bank balance update for account #" .. accountID, 1)
+			end
+		end
 		return false
 	end
 	if not setElementDataEx(thePlayer, balanceKey, newBalance, true) then
