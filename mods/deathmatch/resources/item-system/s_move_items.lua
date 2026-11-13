@@ -522,13 +522,26 @@ local function moveWorldItemToElement( item, element )
 			end
 		end
 
-		local shellSlot = #getItems(element)
+		local targetItems = getItems(element)
+		local worldItems = getItems(item)
+		if type(targetItems) ~= "table" or type(worldItems) ~= "table" then
+			local shellSlot = type(targetItems) == "table" and #targetItems or nil
+			if shellSlot then takeItemFromSlot(element, shellSlot) end
+			triggerClientEvent(source, "finishItemMove", source)
+			return false
+		end
+		local shellSlot = #targetItems
 		local transferComplete = true
-		while #getItems(item) > 0 do
+		while #worldItems > 0 do
 			local moved, moveError = moveItem(item, element, 1)
 			if not moved then
 				transferComplete = false
 				outputDebugString("[item-system] World item content transfer stopped: " .. tostring(moveError), 2)
+				break
+			end
+			worldItems = getItems(item)
+			if type(worldItems) ~= "table" then
+				transferComplete = false
 				break
 			end
 		end
