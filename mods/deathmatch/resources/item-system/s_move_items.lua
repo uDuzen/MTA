@@ -119,7 +119,7 @@ local function moveToElement( element, slot, ammo, event )
 			-- ANTI ALT-ALT FOR NON AMMO ITEMS, CHECK THIS FUNCTION FOR AMMO ITEM BELOW AND FOR WORLD ITEM CHECK s_world_items.lua/ MAXIME
 			--31 -> 43  = DRUGS
 			if ( (item[1] >= 31 and item[1] <= 43) or itemBannedByAltAltChecker[item[1]]) and not (getElementModel(element) == 2942 and item[1] == 150) then
-				local hoursPlayedFrom = getElementData( source, "hoursplayed" )
+				local hoursPlayedFrom = tonumber(getElementData(source, "hoursplayed")) or 99
 				local hoursPlayedTo = 99
 				if isElement(element) and getElementType(element) == "player" then
 					hoursPlayedTo = getElementData( element, "hoursplayed" )
@@ -143,10 +143,10 @@ local function moveToElement( element, slot, ammo, event )
 			end
 			
 			-- Attempted to put an item INTO their alternate characters vehicle (not really much need to make a warning, as long as it's prevented)
-			if getElementType(element) == "vehicle" and getElementData(element, "faction") < 0 then 
+			if getElementType(element) == "vehicle" and (tonumber(getElementData(element, "faction")) or 0) < 0 then 
 				local accountID = exports.cache:getAccountFromCharacterId(getElementData(source, "account:character:id"))
 				local vehicleAccountID = exports.cache:getAccountFromCharacterId(getElementData(element, "owner"))
-				if vehicleAccountID and accountID.id == vehicleAccountID.id and getElementData(source, "account:character:id") ~= getElementData(element, "owner") then
+				if accountID and vehicleAccountID and accountID.id == vehicleAccountID.id and getElementData(source, "account:character:id") ~= getElementData(element, "owner") then
 					--exports.global:sendWrnToStaff(getPlayerName(source):gsub("_", " ") .. " (" .. getElementData(source, "account:username") .. ") has attempted to put a " .. getItemName(item[1]) .. " into their alternate characters vehicle (#" .. getElementData(element, "dbid") .. ").", "ALT>ALT")
 					outputChatBox(" You are not allowed to put items into your alternate characters vehicle!", source, 255, 0, 0)
 					triggerClientEvent( source, event or "finishItemMove", source )
@@ -232,7 +232,7 @@ local function moveToElement( element, slot, ammo, event )
 					triggerClientEvent( source, event or "finishItemMove", source )
 					return
 				elseif item[1] == 138 then
-					if not exports.integration:isPlayerTrialAdmin(source) and getElementType(element) == "Vehicle" then
+					if not exports.integration:isPlayerTrialAdmin(source) and getElementType(element) == "vehicle" then
 						outputChatBox("Only a admin can install this item.", source, 255, 0, 0)
 						triggerClientEvent( source, event or "finishItemMove", source )
 						return
@@ -247,8 +247,8 @@ local function moveToElement( element, slot, ammo, event )
 
 				if (item[1] == 134) then -- Money
 					if not exports.global:isStaffOnDuty(source) and not exports.global:isStaffOnDuty(element) then
-						local hoursPlayedFrom = getElementData( source, "hoursplayed" ) or 99
-						local hoursPlayedTo = getElementData( element, "hoursplayed" ) or 99
+						local hoursPlayedFrom = tonumber(getElementData(source, "hoursplayed")) or 99
+						local hoursPlayedTo = tonumber(getElementData(element, "hoursplayed")) or 99 or 99
 						if (getElementType(element) == "player") and (getElementType(source) == "player") then
 							if hoursPlayedFrom < 10 or hoursPlayedTo < 10 then
 								outputChatBox("You require 10 hours of playing time to give money to another player.", source, 255, 0, 0)
@@ -275,16 +275,36 @@ local function moveToElement( element, slot, ammo, event )
 						end
 					end
 
-					if exports.global:takeMoney(source, tonumber(item[2])) then
+					local amount = tonumber(item[2])
+					if not amount or amount ~= amount or amount == math.huge or amount <= 0 then
+						outputChatBox("Invalid cash item value.", source, 255, 0, 0)
+					elseif exports.global:takeMoney(source, amount) then
+						local delivered = false
 						if getElementType(element) == "player" then
-							if exports.global:giveMoney(element, tonumber(item[2])) then
-								triggerEvent('sendAme', source, "gives $" .. exports.global:formatMoney(item[2]) .. " to ".. exports.global:getPlayerName(element) .."." )
-							end
+							delivered = exports.global:giveMoney(element, amount)
 						else
-							if exports.global:giveItem(element, 134, tonumber(item[2])) then
-								triggerEvent('sendAme', source, "puts $" .. exports.global:formatMoney(item[2]) .. " inside the "..  name .."." )
-							end
+							delivered = exports.global:giveItem(element, 134, amount)
 						end
+						if delivered then
+							if takeItemFromSlot(source, slot) then
+								if getElementType(element) == "player" then
+									triggerEvent('sendAme', source, "gives $" .. exports.global:formatMoney(amount) .. " to " .. exports.global:getPlayerName(element) .. ".")
+								else
+									triggerEvent('sendAme', source, "puts $" .. exports.global:formatMoney(amount) .. " inside the " .. name .. ".")
+								end
+							else
+							if getElementType(element) == "player" then
+								exports.global:takeMoney(element, amount)
+							else
+								exports.global:takeItem(element, 134, amount)
+							end
+							exports.global:giveMoney(source, amount)
+							outputChatBox("Cash transfer failed and was rolled back.", source, 255, 0, 0)
+						end
+					else
+						exports.global:giveMoney(source, amount)
+						outputChatBox("Could not deliver the cash; the amount was returned to you.", source, 255, 0, 0)
+					end
 					end
 				else -- not money
 					if getElementType( element ) == "object" then
@@ -408,9 +428,8 @@ local function moveWorldItemToElement( item, element )
 
 	local id = tonumber(getElementData( item, "id" ))
 	if not id then
-		outputChatBox("Error: No world item ID. Notify a scripter. (s_move_items)",source,255,0,0)
-		destroyElement(element)
-		return
+		outputChatBox("Error: No world item ID. Notify a scripter. (s_move_items)", source, 255, 0, 0)
+		return false
 	end
 	local itemID = getElementData( item, "itemID" )
 	local itemValue = getElementData( item, "itemValue" ) or 1
@@ -435,7 +454,7 @@ local function moveWorldItemToElement( item, element )
 	end
 
 	if itemID == 138 then
-		if not exports.integration:isPlayerTrialAdmin(source) and getElementType(element) == "Vehicle" then
+		if not exports.integration:isPlayerTrialAdmin(source) and getElementType(element) == "vehicle" then
 			outputChatBox("Only an admin can install this item.", source, 255, 0, 0)
 			return
 		end
@@ -544,10 +563,10 @@ local function moveFromElement( element, slot, ammo, index )
 		end
 
 		-- Attempted to take an item FROM their alternate characters vehicle
-		if getElementType(element) == "vehicle" and getElementData(element, "faction") < 0 then 
+		if getElementType(element) == "vehicle" and (tonumber(getElementData(element, "faction")) or 0) < 0 then 
 			local accountID = exports.cache:getAccountFromCharacterId(getElementData(source, "account:character:id"))
 			local vehicleAccountID = exports.cache:getAccountFromCharacterId(getElementData(element, "owner"))
-			if vehicleAccountID and accountID.id == vehicleAccountID.id and getElementData(source, "account:character:id") ~= getElementData(element, "owner") then
+			if accountID and vehicleAccountID and accountID.id == vehicleAccountID.id and getElementData(source, "account:character:id") ~= getElementData(element, "owner") then
 				exports.global:sendWrnToStaff(getPlayerName(source):gsub("_", " ") .. " (" .. getElementData(source, "account:username") .. ") has attempted to take a " .. getItemName(item[1]) .. " from their alternate characters vehicle (#" .. getElementData(element, "dbid") .. ").", "ALT>ALT")
 				outputChatBox(" You are not allowed to take items from your alternate characters vehicle!", source, 255, 0, 0)
 				triggerClientEvent( source, event or "finishItemMove", source )
@@ -569,7 +588,7 @@ local function moveFromElement( element, slot, ammo, index )
 			outputChatBox( "The inventory is full.", source, 255, 0, 0 )
 		elseif not exports.integration:isPlayerTrialAdmin( source ) and getElementType( element ) == "vehicle" and ( item[1] == 61 or item[1] == 85  or item[1] == 117 or item[1] == 140) then
 			outputChatBox( "Please contact an admin via F1 to move this item.", source, 255, 0, 0 )
-		elseif not exports.integration:isPlayerAdmin(source) and (item[1] == 138) then
+		elseif not exports.integration:isPlayerAdmin(source) and (item[1] == 138) and getElementType(element) == "vehicle" then
 			outputChatBox("This item requires a regular admin to be moved.", source, 255, 0, 0)
 		elseif not exports.integration:isPlayerTrialAdmin(source) and (item[1] == 139) then
 			outputChatBox("This item requires an admin to be moved.", source, 255, 0, 0)
