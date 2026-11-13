@@ -747,12 +747,17 @@ function makeGenericItemCargo(thePlayer, admin, genericType, price, quantity, na
 	scale = tonumber(scale) or 1
 	if not genericType or genericType < 1 or genericType > 3 or genericType ~= math.floor(genericType)
 		or not price or price < 0 or price > 1000000 or price ~= math.floor(price)
-		or not quantity or quantity < 1 or quantity > 20 or quantity ~= math.floor(quantity)
-		or type(name) ~= "string" or #name < 1 or #name > 64
+		or (price == 0 and not exports.integration:isPlayerTrialAdmin(thePlayer))
+		or not quantity or quantity < 1 or quantity > 30 or quantity ~= math.floor(quantity)
+		or type(name) ~= "string" or #name < 3 or #name > 64
 		or not model or model < 1 or model > 20000 or model ~= math.floor(model)
 		or scale ~= scale or scale < 0.1 or scale > 10 then return false end
-	if texURL ~= nil and (type(texURL) ~= "string" or #texURL > 512) then return false end
-	if texName ~= nil and (type(texName) ~= "string" or #texName > 64) then return false end
+	if (texURL == nil) ~= (texName == nil) then return false end
+	if texURL ~= nil and (type(texURL) ~= "string" or #texURL > 512
+		or not texURL:match("^https?://[%w%.%-]+")
+		or texURL:find("[%c%s]")) then return false end
+	if texName ~= nil and (type(texName) ~= "string" or #texName < 1 or #texName > 64
+		or not texName:match("^[%w_%.%-]+$")) then return false end
 	name = name:gsub("[%c]", "")
 	if #name < 1 then return false end
 	local itemID = (genericType == 1 and 80) or (genericType == 2 and 89) or 95
@@ -796,7 +801,7 @@ function makeGenericItemCargo(thePlayer, admin, genericType, price, quantity, na
 	if created ~= quantity then
 		-- Keep successfully created entries and charge only their proportional share.
 		-- Removing by itemID/value could delete an older generic with identical value.
-		local chargeForCreated = math.floor(price * created / quantity)
+		local chargeForCreated = math.ceil(price * created / quantity)
 		local refund = price - chargeForCreated
 		local refundSucceeded = refund == 0 or exports.global:giveMoney(paymentTarget, refund)
 		if refundSucceeded then
