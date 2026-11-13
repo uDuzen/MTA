@@ -134,6 +134,7 @@ local function moveToElement(element, slot, ammo, event)
 	end
 
 	local name = getName(element)
+	local elementItemID = getElementData(element, "itemID")
 
 	if not ammo then
 		local sourceItems = getItems(source)
@@ -330,7 +331,6 @@ local function moveToElement(element, slot, ammo, event)
 				else -- not money
 					if getElementType( element ) == "object" then
 						local elementModel = getElementModel(element)
-						elementItemID = getElementData(element, "itemID")
 						if elementItemID then
 							if elementItemID == 166 then --video player
 								if item[1] ~= 165 then --if item being moved to video player is not a valid video item
