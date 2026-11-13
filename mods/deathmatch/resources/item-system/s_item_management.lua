@@ -177,16 +177,20 @@ end
 function loadItems( element, force )
 	if not isElement( element ) then
 		return false, "No element"
-	elseif not getID( element ) then
+	elseif getType(element) == 255 or not tonumber(getID(element))
+		or tonumber(getID(element)) ~= tonumber(getID(element))
+		or tonumber(getID(element)) == math.huge or tonumber(getID(element)) ~= math.floor(tonumber(getID(element))) then
 		return false, "Invalid Element ID"
 	elseif force or not saveditems[ element ] then
 		saveditems[ element ] = {}
 		--notify( element )
-		local result = mysql:query( "SELECT * FROM items WHERE type = " .. getType( element ) .. " AND owner = " .. getID( element ) .. " ORDER BY `index` ASC" )
+		local elementID = tonumber(getID(element))
+		local elementType = getType(element)
+		local result = mysql:query( "SELECT * FROM items WHERE type = " .. elementType .. " AND owner = " .. elementID .. " ORDER BY `index` ASC" )
 		if result then
 			local count = 0
 			repeat
-				row = mysql:fetch_assoc(result)
+				local row = mysql:fetch_assoc(result)
 				if row then
 					count = count + 1
 					saveditems[element][count] = {
@@ -270,6 +274,17 @@ end
 
 -- gives an item to an element
 function giveItem( element, itemID, itemValue, itemIndex, isThisFromSplittingOrAdminCmd, metadata )
+	itemID = tonumber(itemID)
+	if not itemID or itemID < 1 or itemID ~= math.floor(itemID)
+		or itemID > 1000 or itemValue == nil
+		or (type(itemValue) ~= "string" and type(itemValue) ~= "number") then
+		return false, "Invalid item ID or value"
+	end
+	itemValue = tostring(itemValue)
+	if #itemValue > 1024 then return false, "Item value is too long" end
+	if itemIndex ~= nil and (not tonumber(itemIndex) or tonumber(itemIndex) < 1 or tonumber(itemIndex) ~= math.floor(tonumber(itemIndex))) then
+		return false, "Invalid item index"
+	end
 	local success, error = loadItems( element )
 	if success then
 		if not metadata then
@@ -346,9 +361,9 @@ function takeItem(element, itemID, itemValue)
 	if success then
 		local success, slot = hasItem(element, itemID, itemValue)
 		if success then
-			takeItemFromSlot(element, slot)
-			if (tonumber(itemID) == 115 or tonumber(itemID) == 116) and (getElementType(element) == 'player')  then
-				triggerEvent("updateLocalGuns", element)
+			local removed, removeError = takeItemFromSlot(element, slot)
+			if not removed then
+				return false, removeError or "Item could not be removed from the database"
 			end
 			return true
 		else
@@ -402,9 +417,12 @@ function updateItemValue(element, slot, itemValue)
 			local itemValue = tonumber(itemValue) or tostring(itemValue)
 			if itemValue then
 				local itemIndex = saveditems[element][slot][3]
+				local updated = dbExec(exports.mysql:getConn('mta'), "UPDATE items SET itemValue=? WHERE `index`=? ", itemValue, itemIndex)
+				if not updated then
+					return false, "Item value could not be saved"
+				end
 				saveditems[element][slot][2] = itemValue
-				notify( element )
-				dbExec( exports.mysql:getConn('mta'), "UPDATE items SET itemValue=? WHERE `index`=? ", itemValue, itemIndex )
+				notify(element)
 				return true
 			else
 				return false, "Invalid ItemValue"
@@ -654,8 +672,11 @@ end
 
 -- returns a list of all items of that element
 function getItems(element)
-	loadItems( element )
-	return saveditems[element]
+	local success = loadItems(element)
+	if success then
+		return saveditems[element]
+	end
+	return {}
 end
 
 
