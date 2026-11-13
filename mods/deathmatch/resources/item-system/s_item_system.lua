@@ -41,17 +41,19 @@ local glowstickColor = 1
 --
 -- callbacks
 function useItem(itemSlot, additional)
-	if client and client ~= source then return end
-
-	if not itemSlot then
-		return
-	end
+	if client and client ~= source then return false end
+	if not isElement(source) or getElementType(source) ~= "player"
+		or tonumber(getElementData(source, "loggedin")) ~= 1 then return false end
+	itemSlot = tonumber(itemSlot)
+	if not itemSlot or itemSlot < 1 or itemSlot ~= math.floor(itemSlot) then return false end
 
 	local items = getItems(source)
-	local itemID = items[itemSlot][1]
-	local itemValue = items[itemSlot][2]
-	local itemName = getItemName( itemID, itemValue )
-	local metadata = items[itemSlot][5]
+	local selectedItem = type(items) == "table" and items[itemSlot] or nil
+	if type(selectedItem) ~= "table" then return false end
+	local itemID = tonumber(selectedItem[1])
+	local itemValue = selectedItem[2]
+	local itemName = getItemName(itemID, itemValue, selectedItem[5])
+	local metadata = selectedItem[5]
 
 	if isPedDead(source) or getElementData(source, "injuriedanimation") then return end
 
@@ -96,9 +98,9 @@ function useItem(itemSlot, additional)
 				local interiorEntrance = getElementData(interior, "entrance")
 				local interiorExit = getElementData(interior, "exit")
 				local interiorID = getElementData(interior, "dbid")
-				if interiorID == itemValue then
+				if tonumber(interiorID) == tonumber(itemValue) and type(interiorEntrance) == "table" and type(interiorExit) == "table" then
 					for _, point in ipairs( { interiorEntrance, interiorExit } ) do
-						if (point.dim == dimension) then
+						if type(point) == "table" and tonumber(point.dim) == dimension and tonumber(point.x) and tonumber(point.y) and tonumber(point.z) then
 							local distance = getDistanceBetweenPoints3D(posX, posY, posZ, point.x, point.y, point.z)
 							if (distance <= 6) then
 								found = interiorID
@@ -133,7 +135,9 @@ function useItem(itemSlot, additional)
 
 			if found then
 				local dbid, entrance, exit, interiorType, interiorElement = exports.interior_system:findProperty( source, found )
+				if not isElement(interiorElement) then return false end
 				local interiorStatus = getElementData(interiorElement, "status")
+				if type(interiorStatus) ~= "table" then return false end
 				local locked = interiorStatus.locked and 1 or 0
 
 				locked = 1 - locked -- Invert status
@@ -227,15 +231,13 @@ function useItem(itemSlot, additional)
 			triggerEvent('sendAme', source, "drinks a bottle of water.")
 			takeItemFromSlot(source, itemSlot)
 		elseif (itemID==16) then -- clothes
-			--disallowing dogs, only via /setskin
-			if skin == 300 then return false end
-
 			local gender = getElementData(source, 'gender')
 			local race = getElementData(source, 'race')
 
 			--local skin = tonumber(itemValue)
 			local skin, clothingid = unpack(split(tostring(itemValue), ':'))
 			skin = tonumber(skin)
+			if skin == 300 then return false end
 			clothingid = tonumber(clothingid) or nil
 			local fits = false
 
@@ -1060,33 +1062,46 @@ function isWearingBadge(element, item)
 end
 
 function addPlayerArtifacts(player)
-	if not player then player = client or source end
-	if hasItem(player,48) then --backpack
+	if client then
+		if source ~= client then return false end
+		player = client
+	else
+		player = player or source
+	end
+	if not isElement(player) or getElementType(player) ~= "player"
+		or tonumber(getElementData(player, "loggedin")) ~= 1 then return false end
+	if hasItem(player, 48) then
 		triggerEvent("artifacts:add", player, player, "backpack", true)
 	end
-	if hasItem(player,162) then --body armour
+	if hasItem(player, 162) then
 		triggerEvent("artifacts:add", player, player, "kevlar")
 	end
-	if hasItem(player,163) then --duffle bag
+	if hasItem(player, 163) then
 		triggerEvent("artifacts:add", player, player, "dufflebag")
 	end
-	if hasItem(player,164) then --medical bag
+	if hasItem(player, 164) then
 		triggerEvent("artifacts:add", player, player, "medicbag")
 	end
-	if hasItem(player,268) then --surfboard
-		local hasItem, slot, itemValue, itemIndex, metadata = hasItem(player, 268)
-		local customTexture = getItemTexture(268, itemValue, metadata)
-		triggerEvent("artifacts:add", player, player, "surfboard", false, customTexture)
+	if hasItem(player, 268) then
+		local hasSurfboard, slot, itemValue, itemIndex, metadata = hasItem(player, 268)
+		if hasSurfboard then
+			local customTexture = getItemTexture(268, itemValue, metadata)
+			triggerEvent("artifacts:add", player, player, "surfboard", false, customTexture)
+		end
 	end
+	return true
 end
 addEvent("item-system:addPlayerArtifacts", true)
 addEventHandler("item-system:addPlayerArtifacts", getRootElement(), addPlayerArtifacts)
+
 function addAllArtifacts()
-	for k,v in ipairs(getElementsByType("player")) do
-		addPlayerArtifacts(v)
+	if client then return false end
+	for _, player in ipairs(getElementsByType("player")) do
+		addPlayerArtifacts(player)
 	end
+	return true
 end
-addEvent("item-system:addAllArtifacts", true)
+addEvent("item-system:addAllArtifacts", false)
 addEventHandler("item-system:addAllArtifacts", getRootElement(), addAllArtifacts)
 
 function explodeFlash(obj)
@@ -1115,55 +1130,58 @@ function destroyGlowStick(marker)
 	destroyElement(marker)
 end
 
-function destroyItem(itemID)
-	if isPedDead(source) or getElementData(source, "injuriedanimation") then return end
-	local itemName = ""
-	if itemID and itemID > 0 then
-		local itemSlot = itemID
-		local item = getItems( source )[itemSlot]
+function destroyItem(itemSlot)
+	if client and client ~= source then return false end
+	if not isElement(source) or getElementType(source) ~= "player"
+		or tonumber(getElementData(source, "loggedin")) ~= 1
+		or isPedDead(source) or getElementData(source, "injuriedanimation") then return false end
+
+	itemSlot = tonumber(itemSlot)
+	if not itemSlot or itemSlot ~= math.floor(itemSlot) then return false end
+	local itemName
+	if itemSlot > 0 then
+		local items = getItems(source)
+		local item = type(items) == "table" and items[itemSlot] or nil
+		if type(item) ~= "table" then return false end
+		local itemID = tonumber(item[1])
+		local itemValue = item[2]
 		local metadata = item[5]
-		if item then
-			local itemID = item[1]
-			local itemValue = item[2]
+		if not itemID then return false end
 
-			if itemID == 48 and countItems( source, 48 ) == 1 then -- backpack
-				if getCarriedWeight( source ) - getItemWeight( 48, 1 ) > 10 then
-					return
-				end
-			end
+		if itemID == 48 and countItems(source, 48) == 1
+			and getCarriedWeight(source) - getItemWeight(48, 1) > 10 then return false end
+		if itemID == 126 and countItems(source, 126) == 1
+			and getCarriedWeight(source) - getItemWeight(126, 1) > 10 then return false end
 
-
-			if itemID == 126 and countItems( source, 126 ) == 1 then -- duty belt
-				if getCarriedWeight( source ) - getItemWeight( 126, 1 ) > 10 then
-					return
-				end
-			end
-
-			if itemID == 134 then
-				exports.global:takeMoney(source, itemValue)
-			end
-
-			itemName = getItemName( itemID, itemValue, metadata )
-			takeItemFromSlot(source, itemSlot)
-
-			triggerClientEvent(source, "item:updateclient", source)
-
-			doItemGiveawayChecks(source, itemID)
-		
+		if itemID == 134 then
+			local removed = exports.global:takeMoney(source, tonumber(itemValue))
+			if not removed then return false end
+			-- takeMoney removes the old cash voucher and creates the new balance voucher.
 		else
-			return
+			if not takeItemFromSlot(source, itemSlot) then
+				outputChatBox("The item could not be removed. Please try again.", source, 255, 0, 0)
+				return false
+			end
 		end
+		itemName = getItemName(itemID, itemValue, metadata) or "item"
+		doItemGiveawayChecks(source, itemID)
 	else
-		if itemID == -100 then
+		if itemSlot == -100 then
+			if getPedArmor(source) <= 0 then return false end
 			setPedArmor(source, 0)
 			itemName = "Body Armor"
 		else
-			exports.global:takeWeapon(source, tonumber(-itemID))
-			itemName = getWeaponNameFromID( -itemID )
+			local weaponID = -itemSlot
+			if weaponID < 1 or weaponID > 46 or not getWeaponNameFromID(weaponID)
+				or not takeWeapon(source, weaponID) then return false end
+			itemName = getWeaponNameFromID(weaponID)
 		end
 	end
-	outputChatBox("You destroyed a " .. itemName .. ".", source, 255, 194, 14)
-	triggerEvent('sendAme', source, "destroyed a "..itemName..".")
+
+	triggerClientEvent(source, "item:updateclient", source)
+	outputChatBox("You destroyed a " .. tostring(itemName) .. ".", source, 255, 194, 14)
+	triggerEvent("sendAme", source, "destroyed a " .. tostring(itemName) .. ".")
+	return true
 end
 addEvent("destroyItem", true)
 addEventHandler("destroyItem", getRootElement(), destroyItem)
@@ -1177,9 +1195,30 @@ function isVowel(text)
 	return text == "a" or text == "o" or text == "i" or text == "u" or text == "e"
 end
 
+local showItemCooldown = setmetatable({}, { __mode = "k" })
 function showItem(itemName)
-	if isPedDead(source) or getElementData(source, "injuriedanimation") then return end
-	triggerEvent('sendAme', source, "shows everyone "..(isVowel(itemName) and "an" or "a").." " .. removeOOC(itemName) .. ".")
+	if client and client ~= source then return false end
+	if not isElement(source) or getElementType(source) ~= "player"
+		or tonumber(getElementData(source, "loggedin")) ~= 1
+		or isPedDead(source) or getElementData(source, "injuriedanimation") then return false end
+	if type(itemName) ~= "string" or #itemName < 1 or #itemName > 128 then return false end
+	local now = getTickCount()
+	if showItemCooldown[source] and now - showItemCooldown[source] < 1500 then return false end
+	local safeName = itemName:gsub("[%c]", ""):gsub("<", ""):gsub(">", "")
+	local items = getItems(source)
+	local ownsItem = false
+	if type(items) == "table" then
+		for _, item in ipairs(items) do
+			if getItemName(item[1], item[2], item[5]) == itemName then
+				ownsItem = true
+				break
+			end
+		end
+	end
+	if not ownsItem or #safeName < 1 then return false end
+	showItemCooldown[source] = now
+	triggerEvent("sendAme", source, "shows everyone " .. (isVowel(safeName) and "an" or "a") .. " " .. removeOOC(safeName) .. ".")
+	return true
 end
 addEvent("showItem", true)
 addEventHandler("showItem", getRootElement(), showItem)
@@ -1248,37 +1287,41 @@ function combineMoney(thePlayer, commandName)
 end
 addCommandHandler("combinemoney", combineMoney)
 
-function toggleBadge(source, badges, itemID , itemValue)
-	if ( getElementData( source, badges[itemID][1] ) ) then
-		exports.anticheat:changeProtectedElementDataEx(source, badges[itemID][1], false, true)
+function toggleBadge(requestedPlayer, _clientBadges, itemID, itemValue)
+	local player = client or requestedPlayer
+	if client and (source ~= client or requestedPlayer ~= client) then return false end
+	itemID = tonumber(itemID)
+	local badge = itemID and badges[itemID]
+	if not isElement(player) or getElementType(player) ~= "player"
+		or tonumber(getElementData(player, "loggedin")) ~= 1
+		or type(badge) ~= "table" or type(badge[1]) ~= "string" then return false end
+	if not hasItem(player, itemID, itemValue) then return false end
+
+	if getElementData(player, badge[1]) then
+		exports.anticheat:changeProtectedElementDataEx(player, badge[1], false, true)
 		if itemID == 122 or itemID == 123 or itemID == 124 or itemID == 125 or itemID == 135 or itemID == 136 or itemID == 158 or itemID == 168 then
-			triggerEvent('sendAme',  source, "removes a " .. badges[itemID][1] .. " from their head." )
+			triggerEvent("sendAme", player, "removes a " .. badge[1] .. " from their head.")
 		else
-			triggerEvent('sendAme', source, "removes a " .. badges[itemID][1] .. ".")
+			triggerEvent("sendAme", player, "removes a " .. badge[1] .. ".")
 		end
 	else
-		for key, badge in pairs ( badges ) do
-			if key ~= itemID then
-				if ( getElementData ( source, badge[1] ) ) then
-					exports.anticheat:changeProtectedElementDataEx( source, badge[1], false, true )
-					if itemID == 122 or itemID == 123 or itemID == 124 or itemID == 125 or itemID == 135 or itemID == 136 or itemID == 158 or itemID == 168 then
-					triggerEvent('sendAme',  source, "removes a " .. badge[1] .. " from their head." )
-					else
-					triggerEvent('sendAme',  source, "removes a " .. badge[1] .. "." )
-					end
-				end
+		for key, otherBadge in pairs(badges) do
+			if key ~= itemID and getElementData(player, otherBadge[1]) then
+				exports.anticheat:changeProtectedElementDataEx(player, otherBadge[1], false, true)
+				triggerEvent("sendAme", player, "removes a " .. otherBadge[1] .. ".")
 			end
 		end
-
 		if itemID == 122 or itemID == 123 or itemID == 124 or itemID == 125 or itemID == 135 or itemID == 136 or itemID == 158 or itemID == 168 then
-		exports.anticheat:changeProtectedElementDataEx( source, badges[itemID][1], true )
-		triggerEvent('sendAme',  source, "wraps a " .. badges[itemID][1] .. " around their head." )
+			exports.anticheat:changeProtectedElementDataEx(player, badge[1], true, true)
+			triggerEvent("sendAme", player, "wraps a " .. badge[1] .. " around their head.")
 		else
-			exports.anticheat:changeProtectedElementDataEx( source, badges[itemID][1], removeOOC(itemValue), true )
-			triggerEvent('sendAme',  source, "puts on a " .. badges[itemID][1] .. "." )
+			local safeValue = type(itemValue) == "string" and itemValue:sub(1, 128) or tostring(itemValue or "")
+			exports.anticheat:changeProtectedElementDataEx(player, badge[1], removeOOC(safeValue), true)
+			triggerEvent("sendAme", player, "puts on a " .. badge[1] .. ".")
 		end
 	end
-	exports.global:updateNametagColor(source)
+	exports.global:updateNametagColor(player)
+	return true
 end
 addEvent("item-system:toggleBadge", true)
 addEventHandler("item-system:toggleBadge", getRootElement(), toggleBadge)
