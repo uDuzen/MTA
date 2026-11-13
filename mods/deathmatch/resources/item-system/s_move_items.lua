@@ -116,12 +116,13 @@ local function moveToElement(element, slot, ammo, event)
 		triggerClientEvent(source, "finishItemMove", source)
 		return false
 	end
+	local weaponSlot = slot ~= -100 and getSlotFromWeapon(slot) or nil
 	if ammo == true and slot == -100 then
 		-- The client uses a boolean marker for the armor transfer path.
 	elseif ammo then
 		ammo = tonumber(ammo)
 		if not ammo or ammo ~= ammo or ammo == math.huge or ammo < 0 or ammo > 10000 or ammo ~= math.floor(ammo)
-			or (slot ~= -100 and (slot < 1 or slot > 46 or not getSlotFromWeapon(slot))) then
+			or (slot ~= -100 and (slot < 1 or slot > 46 or not weaponSlot or weaponSlot == 0)) then
 			triggerClientEvent(source, "finishItemMove", source)
 			return false
 		end
@@ -413,7 +414,6 @@ local function moveToElement(element, slot, ammo, event)
 						end
 					end
 				else
-					local weaponSlot = getSlotFromWeapon(slot)
 					local getCurrentMaxAmmo = weaponSlot and (getPedTotalAmmo(source, weaponSlot) or 0) or 0
 					if ammo > getCurrentMaxAmmo then
 						exports.global:sendMessageToAdmins("[items\moveToElement] Possible duplication of gun from '"..getPlayerName(source).."' // " .. getItemName( -slot ) )
