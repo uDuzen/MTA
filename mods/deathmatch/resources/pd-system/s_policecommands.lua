@@ -41,27 +41,33 @@ addEvent("forceElementStreamIn", false)
 addEventHandler("forceElementStreamIn", getRootElement(), tellNearbyPlayersVehicleStrobesOn)
 
 function theftSystem(thePlayer, commandName, targetPlayer)
+	if not isElement(thePlayer) or getElementType(thePlayer) ~= "player"
+		or tonumber(getElementData(thePlayer, "loggedin")) ~= 1 then return false end
 	local faction = exports.factions:getCurrentFactionDuty(thePlayer)
-	if faction then
-		local leader = exports.factions:hasMemberPermissionTo(thePlayer, faction, "respawn_vehs")
-		local factionTeam = exports.factions:getFactionFromID(faction)
-		local factionType = getElementData(factionTeam, "type")
-		if (factionType==2) and (leader) then
-			if not (targetPlayer) then
-				outputChatBox("SYNTAX: /" .. commandName .. " [Partial Player Nick]", thePlayer, 255, 194, 14)
-				return
-			end
-			local targetPlayer, targetPlayerName = exports.global:findPlayerByPartialNick(thePlayer, targetPlayer)
-			local targetVehicle = getPedOccupiedVehicle(targetPlayer)
-			if exports.global:hasItem(targetVehicle, 138) then
-				setVehicleEngineState(targetVehicle, false)
-				exports.anticheat:changeProtectedElementDataEx(theVehicle, "engine", 0, true)
-				setVehicleLocked (targetVehicle, true )
-				exports.global:sendLocalDoAction(targetPlayer, "You would hear a sudden silence and a slight clicking noise as some bolts would slide across, locking the door in place.")
-			else
-				outputChatBox("This vehicle does not have the Anti-Theft System.", thePlayer, 255, 0, 0)
-			end
-		end
+	if not faction then return false end
+	local leader = exports.factions:hasMemberPermissionTo(thePlayer, faction, "respawn_vehs")
+	local factionTeam = exports.factions:getFactionFromID(faction)
+	if not leader or not isElement(factionTeam) or tonumber(getElementData(factionTeam, "type")) ~= 2 then return false end
+	if not targetPlayer then
+		outputChatBox("SYNTAX: /" .. commandName .. " [Partial Player Nick]", thePlayer, 255, 194, 14)
+		return false
 	end
+	local target, targetPlayerName = exports.global:findPlayerByPartialNick(thePlayer, targetPlayer)
+	if not isElement(target) or getElementType(target) ~= "player"
+		or tonumber(getElementData(target, "loggedin")) ~= 1 then return false end
+	local targetVehicle = getPedOccupiedVehicle(target)
+	if not isElement(targetVehicle) then
+		outputChatBox(targetPlayerName .. " is not in a vehicle.", thePlayer, 255, 0, 0)
+		return false
+	end
+	if not exports.global:hasItem(targetVehicle, 138) then
+		outputChatBox("This vehicle does not have the Anti-Theft System.", thePlayer, 255, 0, 0)
+		return false
+	end
+	setVehicleEngineState(targetVehicle, false)
+	exports.anticheat:changeProtectedElementDataEx(targetVehicle, "engine", 0, true)
+	setVehicleLocked(targetVehicle, true)
+	exports.global:sendLocalDoAction(target, "You would hear a sudden silence and a slight clicking noise as some bolts would slide across, locking the door in place.")
+	return true
 end
 addCommandHandler("emp", theftSystem, false, false)
