@@ -120,14 +120,16 @@ addEventHandler( "bank:checkInsideATMMachine", getRootElement(), checkInsideATMM
 end
 addCommandHandler("iamtester",iAmTester)]]
 
-function isAltToAlt(source, item)
-	local result = exports.mysql:query_fetch_assoc("SELECT account FROM characters WHERE id='"..exports.mysql:escape_string(item).."'")
-	if result then
-		if tostring(result["account"]) == tostring(getElementData(source, "account:id")) then
-			return true
-		end
-	end
-	return false
+function isAltToAlt(player, item)
+	if not isElement(player) or getElementType(player) ~= "player"
+		or tonumber(getElementData(player, "loggedin")) ~= 1 then return nil end
+	local characterID = tonumber(item)
+	local accountID = tonumber(getElementData(player, "account:id"))
+	if not characterID or characterID < 1 or characterID ~= math.floor(characterID)
+		or not accountID or accountID < 1 then return nil end
+	local result = exports.mysql:query_fetch_assoc("SELECT account FROM characters WHERE id = " .. characterID .. " LIMIT 1")
+	if not result then return nil end
+	return tonumber(result.account) == accountID
 end
 
 function takeOutATMCard(theATM, item)
@@ -143,11 +145,17 @@ function takeOutATMCard(theATM, item)
 	local values = split(item[2], ";")
 	local v = values and values[2]
 	if not v or not tonumber(v) then return false end
-	if tonumber(v) ~= tonumber(getElementData(source, "account:character:id")) then
-		if isAltToAlt(source, v) then
-			outputChatBox("Denied - Card Deleted.", source, 255, 0, 0)
-			exports["item-system"]:takeItem(theATM, item[1], item[2])
-			return
+	if tonumber(v) ~= tonumber(getElementData(player, "account:character:id")) then
+		local alternate = isAltToAlt(player, v)
+		if alternate == nil then
+			outputChatBox("The ATM card owner could not be verified. Please try again later.", player, 255, 0, 0)
+			return false
+		elseif alternate then
+			outputChatBox("Denied - Card Deleted.", player, 255, 0, 0)
+			if not exports["item-system"]:takeItem(theATM, 150, item[2]) then
+				outputDebugString("[BANK] Failed to remove unauthorized ATM card from ATM inventory.", 1)
+			end
+			return false
 		end
 	end
 	if exports["item-system"]:takeItem(theATM, 150, item[2]) then
