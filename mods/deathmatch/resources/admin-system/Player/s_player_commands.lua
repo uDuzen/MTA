@@ -578,7 +578,11 @@ function givePlayerGunAmmo( thePlayer, commandName, targetPlayer, weap_id, round
 				end
 
 				weap_id = tonumber(weap_id)
-				rounds = tonumber(rounds) or nil
+				rounds = (rounds ~= nil) and tonumber(rounds) or nil
+				if rounds ~= nil and (rounds ~= rounds or rounds < 1 or rounds > 10000 or rounds ~= math.floor(rounds)) then
+					outputChatBox("Ammunition rounds must be a whole number between 1 and 10000.", thePlayer, 255, 0, 0)
+					return false
+				end
 				if exports.weapon:isWeapAmmoless( weap_id ) then
 					outputChatBox( getWeaponNameFromID(weap_id).." don't need ammunition." , thePlayer, 255, 0, 0 )
 					return
