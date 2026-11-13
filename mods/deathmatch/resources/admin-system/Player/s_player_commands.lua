@@ -839,11 +839,22 @@ function takePlayerItem(thePlayer, commandName, targetPlayer, itemID, ...)
                             exports.logs:dbLog(thePlayer, 4, targetPlayer, "DELPLAYERITEM "..tostring(itemID).." "..tostring(itemValue))
                             triggerClientEvent(targetPlayer, "item:updateclient", targetPlayer)
                         elseif (commandName == "takeitem") then
-                            outputChatBox("You took item " .. displayItemName .. " with the value of (" .. itemValue .. ") from " .. targetPlayerName .. " and transfered it to your inventory.", thePlayer, 0, 255, 0)
-                            exports.global:takeItem(targetPlayer, itemID, itemValue)
-                            exports.global:giveItem(thePlayer, itemID, itemValue)
+                            local removed = exports.global:takeItem(targetPlayer, itemID, itemValue)
+                            if not removed then
+                                outputChatBox("The item could not be removed from the target's inventory.", thePlayer, 255, 0, 0)
+                                return false
+                            end
+                            local given = exports.global:giveItem(thePlayer, itemID, itemValue)
+                            if not given then
+                                exports.global:giveItem(targetPlayer, itemID, itemValue)
+                                outputChatBox("Transfer failed; the item was returned to the target.", thePlayer, 255, 0, 0)
+                                triggerClientEvent(targetPlayer, "item:updateclient", targetPlayer)
+                                return false
+                            end
+                            outputChatBox("You took item " .. tostring(displayItemName) .. " with the value of (" .. tostring(itemValue) .. ") from " .. targetPlayerName .. " and transferred it to your inventory.", thePlayer, 0, 255, 0)
                             exports.logs:dbLog(thePlayer, 4, targetPlayer, "TAKEITEM "..tostring(itemID).." "..tostring(itemValue))
                             triggerClientEvent(targetPlayer, "item:updateclient", targetPlayer)
+                            triggerClientEvent(thePlayer, "item:updateclient", thePlayer)
                         end
                     else
                         outputChatBox("Player doesn't have that item", thePlayer, 255, 0, 0)
@@ -1640,6 +1651,10 @@ function warnPlayer(thePlayer, commandName, targetPlayer, ...)
 				end
 
 				local fetchData = mysql:query_fetch_assoc("SELECT `warns` FROM `account_details` WHERE `account_id`='"..mysql:escape_string(accountID).."'")
+                if type(fetchData) ~= "table" then
+                    outputChatBox("Could not retrieve the player's warning record. No warning was applied.", thePlayer, 255, 0, 0)
+                    return false
+                end
 
 				local adminUsername = getElementData(thePlayer, "account:username")
 				local playerName = getPlayerName(thePlayer)
@@ -1650,9 +1665,10 @@ function warnPlayer(thePlayer, commandName, targetPlayer, ...)
 					adminUsername = "Admin"
 				end
 
-				local warns = fetchData["warns"] or 0
-				reason = table.concat({...}, " ")
-				warns = warns + 1
+				local warns = tonumber(fetchData["warns"]) or 0
+                local reason = table.concat({...}, " "):gsub("[%c]", " "):sub(1, 255)
+                if reason == "" then return false end
+                warns = warns + 1
 
 				mysql:query_free("UPDATE account_details SET warns=" .. mysql:escape_string(warns) .. ", monitored = 'Was warned for " .. tostring(reason):gsub("'","''").."' WHERE account_id = " .. mysql:escape_string(accountID) )
 				outputChatBox("You have given " .. targetPlayerName .. " a warning. (" .. warns .. "/3).", thePlayer, 255, 0, 0)
