@@ -423,13 +423,16 @@ local function moveToElement(element, slot, ammo, event)
 					end
 					if ammo > 0 then
 						if not takeWeapon(source, slot) then
+							triggerClientEvent(source, "finishItemMove", source)
 							return false
 						end
 						if giveItem(element, -slot, ammo) then
 							exports.logs:dbLog(source, 39, source, getPlayerName(source) .. " moved " .. getItemName(-slot) .. " - " .. ammo .. " #" .. getElementID(element))
 							output(source, element, -slot)
 						else
-							giveWeapon(source, slot, getCurrentMaxAmmo, true)
+							if not giveWeapon(source, slot, getCurrentMaxAmmo, true) then
+								outputDebugString("[item-system] Failed to restore weapon after inventory insertion failure for " .. getPlayerName(source), 1)
+							end
 							outputChatBox("Ammunition could not be stored; your weapon was restored.", source, 255, 0, 0)
 						end
 					else
