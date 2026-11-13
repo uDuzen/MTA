@@ -34,12 +34,12 @@ function getAllVehs(thePlayer, commandName, ...)
 	if exports.integration:isPlayerTrialAdmin( thePlayer ) then
 		local vehicleList = {}
 		local mQuery1 = nil
-		mQuery1 = mysql:query("SELECT vehicles.id AS vID, type, name, cost, charactername, characters.account AS username, cked, locked, supplies, safepositionX, disabled, deleted, vehicles.adminnote AS iAdminNote, vehicles.createdDate AS iCreatedDate, vehicles.creator AS iCreator, DATEDIFF(NOW(), lastused) AS DiffDate, vehicles.x, vehicles.y, vehicles.y FROM vehicles LEFT JOIN characters ON vehicles.owner = characters.id ORDER BY vehicles.createdDate DESC")
-
+		mQuery1 = mysql:query("SELECT vehicles.id AS vID, type, name, cost, charactername, characters.account AS username, cked, locked, supplies, safepositionX, disabled, deleted, vehicles.adminnote AS iAdminNote, vehicles.createdDate AS iCreatedDate, vehicles.creator AS iCreator, DATEDIFF(NOW(), lastused) AS DiffDate, vehicles.x AS vehicleX, vehicles.y AS vehicleY, vehicles.z AS vehicleZ FROM vehicles LEFT JOIN characters ON vehicles.owner = characters.id ORDER BY vehicles.createdDate DESC")
+		if not mQuery1 then return false end
 		while true do
 			local row = mysql:fetch_assoc(mQuery1)
 			if not row then break end
-			table.insert(vehicleList, { row["vID"], row["type"], row["name"], row["cost"], row["charactername"], row["username"], row["cked"], row["DiffDate"], row["locked"], row["supplies"], row["safepositionX"], row["disabled"], row["deleted"], row["iAdminNote"], row["iCreatedDate"],row["iCreator"], row["`vehicles`.`x`"], row["`vehicles`.`y`"], row["`vehicles`.`z`"] } )
+			table.insert(vehicleList, { row["vID"], row["type"], row["name"], row["cost"], row["charactername"], row["username"], row["cked"], row["DiffDate"], row["locked"], row["supplies"], row["safepositionX"], row["disabled"], row["deleted"], row["iAdminNote"], row["iCreatedDate"], row["iCreator"], row["vehicleX"], row["vehicleY"], row["vehicleZ"] })
 		end
 		mysql:free_result(mQuery1)
 		triggerClientEvent(thePlayer, "createVehManagerWindow", thePlayer, vehicleList, getElementData( thePlayer, "account:username" ))
@@ -100,6 +100,7 @@ function vehiclesearch(thePlayer, keyword )
 		local mQuery1 = nil
 		local searchTerm = mysql:escape_string(keyword)
 		mQuery1 = mysql:query("SELECT *, v.id AS id, TO_SECONDS(lastUsed) AS lastused_sec FROM vehicles v LEFT JOIN vehicles_shop s ON v.vehicle_shop_id=s.id LEFT JOIN characters c ON v.owner=c.id LEFT JOIN factions f ON v.faction=f.id WHERE v.id LIKE '%"..searchTerm.."%' OR vehmtamodel LIKE '%"..searchTerm.."%' OR vehbrand LIKE '%"..searchTerm.."%' OR vehyear LIKE '%"..searchTerm.."%' OR c.charactername LIKE '%"..searchTerm.."%' OR f.name LIKE '%"..searchTerm.."%' ORDER BY v.id DESC")
+		if not mQuery1 then return false end
 		while true do
 			local row = mysql:fetch_assoc(mQuery1)
 			if not row then break end
@@ -114,7 +115,7 @@ addEventHandler("vehicleManager:Search", getRootElement(), vehiclesearch)
 
 function checkVeh(thePlayer, commandName, vehID)
 	if exports.integration:isPlayerTrialAdmin(thePlayer) or exports.integration:isPlayerSupporter(thePlayer) or exports.integration:isPlayerVehicleConsultant( thePlayer ) then
-		if not tonumber(vehID) or (tonumber(vehID) <= 0 ) or (tonumber(vehID) % 1 ~= 0 ) then
+		if not tonumber(vehID) or tonumber(vehID) <= 0 or tonumber(vehID) % 1 ~= 0 then
 			local veh = getPedOccupiedVehicle(thePlayer) or false
 			vehID = isElement(veh) and getElementData(veh, "dbid") or false
 			if not vehID then
@@ -126,6 +127,7 @@ function checkVeh(thePlayer, commandName, vehID)
 				return false
 			end
 		end
+		vehID = tonumber(vehID)
 
 		local mQuery1 = mysql:query("SELECT `vehicles`.`job` AS `vjob`,`vehicles`.`id` AS `vID`, `vehicles`.`model` AS `vModel`, `vehicles`.`currx` AS `vPosX`, `vehicles`.`curry` AS `vPosY`, `vehicles`.`currz` AS `vPosZ`, `vehicles`.`fuel` AS `vFuel`, `vehicles`.`paintjob` AS `vPaintjob`,	`vehicles`.`hp` AS `vHp`, `factions`.`name` AS `fFactionName`, `characters`.`charactername` AS `cOwner`, `vehicles`.`job` AS `vJob`, `vehicles`.`tintedwindows` AS `vTintedwindows`,	`vehicles`.`currdimension` AS `vCurrdimension`,	`vehicles`.`currinterior` AS `vCurrInterior`, `vehicles`.`impounded` AS `vImpounded`, `vehicles`.`plate` AS `vPlate`, `vehicles`.`registered` AS `registered`, `vehicles`.`odometer` AS `vOdometer`, `vehicles`.`suspensionLowerLimit` AS `vSuspensionLowerLimit`,	`vehicles`.`driveType` AS `vDriveType`,	`vehicles`.`deleted` AS `vDeleted`,	`vehicles`.`chopped` AS `vChopped`,	`vehicles`.`stolen` AS `vStolen`,	DATEDIFF(NOW(), `vehicles`.`lastUsed`) AS `vLastUsed`,	`vehicles`.`creationDate` AS `vCreationDate`, `vehicles`.`tokenUsed`,	`vehicles`.`createdBy` AS `aCreator` FROM `vehicles` LEFT JOIN `characters` ON `vehicles`.`owner`=`characters`.`id` LEFT JOIN `factions` ON`vehicles`.`faction`=`factions`.`id` WHERE `vehicles`.`id`='"..vehID.."' ORDER BY `vehicles`.`creationDate` DESC") or false
 		if mQuery1 then
@@ -261,11 +263,11 @@ end
 addCommandHandler("getvehweight", getVehicleWeight)
 
 function systemDeleteVehicle(vehid, reason) --This function is meant to be used by the system or to be triggered from UCP remotely. Works similarly to the delveh however, it's simplier and doesn't use mta elements. / MAXIME / 2015.1.11
-	if vehid and tonumber(vehid) then
-		vehid = tonumber(vehid)
-	else
+	if not vehid or not tonumber(vehid) or tonumber(vehid) < 1 or tonumber(vehid) ~= math.floor(tonumber(vehid)) then
 		return false, "veh id is missing or invalid"
 	end
+	vehid = tonumber(vehid)
+	reason = type(reason) == "string" and reason:sub(1, 255) or "DELETED"
 	--Existed or not, we take all keys anyway.
 	call( getResourceFromName( "item-system" ), "deleteAll", 3 , vehid )
 
