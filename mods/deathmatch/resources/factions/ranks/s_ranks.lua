@@ -261,10 +261,18 @@ end
 
 function cacheFactionRankDatabase(qh)
 	local result = dbPoll(qh, 0)
-	FactionRanks[0] = {}
-	for i,row in ipairs(result) do
-		FactionRanks[row.id] = {}
-		for column,value in pairs(row) do
+	if type(result) ~= "table" then
+		outputDebugString("[factions] Failed to load faction ranks from the database.", 1)
+		return false
+	end
+	-- Rebuild both caches so a resource reload cannot retain deleted ranks.
+	FactionRanks = { [0] = {} }
+	RanksByFaction = {}
+	for _, row in ipairs(result) do
+		local rankID = tonumber(row.id)
+		if rankID and rankID > 0 then
+			FactionRanks[rankID] = {}
+			for column,value in pairs(row) do
 			if (column ~= "id") then
 				FactionRanks[0][column] = true
 				if (value == "true") then value = true end
@@ -273,10 +281,13 @@ function cacheFactionRankDatabase(qh)
 					-- Associate Faction Ranks
 				if (column == "faction_id") then
 					value = tonumber(value)
-					if (not RanksByFaction[value]) then RanksByFaction[value] = {} end
-					table.insert(RanksByFaction[value], tonumber(row.id))
+					if value and value > 0 then
+						if (not RanksByFaction[value]) then RanksByFaction[value] = {} end
+						table.insert(RanksByFaction[value], rankID)
+					end
 				end
 			end
+		end
 		end
 	end
 	setTimer(function()
