@@ -1,9 +1,14 @@
 local mysql = exports.mysql
+local clientReadyCooldown = setmetatable({}, { __mode = "k" })
 --local salt = "wedorp"
 
 function clientReady()
 	if not client or not isElement(client) or getElementType(client) ~= "player" then return false end
 	local thePlayer = client
+	local now = getTickCount()
+	local lastRequest = clientReadyCooldown[thePlayer]
+	if lastRequest and now - lastRequest < 3000 then return false end
+	clientReadyCooldown[thePlayer] = now
 	local requiredResources = { "global", "mysql", "pool" }
 	for _, resourceName in ipairs(requiredResources) do
 		local dependency = getResourceFromName(resourceName)
@@ -47,6 +52,9 @@ function clientReady()
 end
 addEvent("onJoin", true)
 addEventHandler("onJoin", getRootElement(), clientReady)
+addEventHandler("onPlayerQuit", root, function()
+	clientReadyCooldown[source] = nil
+end)
 
 addEventHandler("accounts:login:request", getRootElement(),
 	function ()
