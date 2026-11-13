@@ -796,32 +796,45 @@ end
 
 
 -- delete all instances of an item from all inventories and maps of all dimensions, return number of deleted items/objects.
-function deleteAll( itemID, itemValue )
+function deleteAll(itemID, itemValue)
+	if itemID == nil then return 0 end
+	itemID = tonumber(itemID) or itemID
+	itemValue = tonumber(itemValue) or itemValue
+	if type(itemID) ~= "number" or itemID < 1 or itemID ~= math.floor(itemID) then return 0 end
+
+	local deleteQuery
+	if itemValue ~= nil then
+		deleteQuery = dbExec(exports.mysql:getConn("mta"), "DELETE FROM items WHERE itemID=? AND itemValue=?", itemID, tostring(itemValue))
+	else
+		deleteQuery = dbExec(exports.mysql:getConn("mta"), "DELETE FROM items WHERE itemID=?", itemID)
+	end
+	if not deleteQuery then
+		outputDebugString("[item-system] deleteAll failed to delete item rows from the database (item " .. tostring(itemID) .. ")", 1)
+		return 0
+	end
+
 	local count = 0
-	if itemID then
-		itemID = tonumber(itemID) or itemID
-		itemValue = tonumber(itemValue) or itemValue
-
-		-- make sure it's erased from the db
-		dbExec( exports.mysql:getConn('mta'), "DELETE FROM items WHERE itemID=? "..( itemValue and "AND itemValue=? " or "" ), itemID, itemValue or nil )
-
-		-- delete from all storages
-		if saveditems then
-			for value in pairs( saveditems ) do
-				if isElement( value ) then
-					while hasItem( value, itemID, itemValue ) do
-						if takeItem( value, itemID, itemValue ) then
-							count = count + 1
-						end
+	if saveditems then
+		for element, inventory in pairs(saveditems) do
+			if isElement(element) and type(inventory) == "table" then
+				for slot = #inventory, 1, -1 do
+					local item = inventory[slot]
+					if type(item) == "table" and tonumber(item[1]) == itemID
+						and (itemValue == nil or tostring(item[2]) == tostring(itemValue)) then
+							local removed, removeError = takeItemFromSlot(element, slot, true)
+							if removed then
+								count = count + 1
+							else
+								outputDebugString("[item-system] deleteAll cache cleanup failed for item " .. tostring(itemID) .. ": " .. tostring(removeError), 1)
+							end
 					end
 				end
 			end
 		end
+	end
 
-		-- remove world items
-		if exports.global:isResourceRunning( 'item-world' ) then
-			count = count + exports['item-world']:deleteAll( itemID, itemValue )
-		end
+	if exports.global:isResourceRunning("item-world") then
+		count = count + (tonumber(exports["item-world"]:deleteAll(itemID, itemValue)) or 0)
 	end
 	return count
 end
