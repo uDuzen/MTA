@@ -422,10 +422,15 @@ function takeItemFromSlot(element, slot, nosqlupdate, no_update_guns)
 			local success = true
 			if not nosqlupdate then
 				index = tonumber(index)
-				if not index or index < 1 or index ~= math.floor(index) then
-					return false, "Invalid database item index"
+				local elementType = getType(element)
+				local elementID = tonumber(getID(element))
+				if not index or index < 1 or index ~= math.floor(index)
+					or elementType == 255 or not elementID or elementID < 0
+					or elementID ~= elementID or elementID == math.huge then
+					return false, "Invalid database item index or owner"
 				end
-				local result = mysql:query_free("DELETE FROM items WHERE `index` = " .. index .. " LIMIT 1")
+				local result = mysql:query_free("DELETE FROM items WHERE `index` = " .. index
+					.. " AND type = " .. elementType .. " AND owner = " .. elementID .. " LIMIT 1")
 				--[[if itemID == 178 then
 					local query = mysql:query_free( "DELETE FROM books WHERE id = " .. index .. " LIMIT 1")
 				end]]
@@ -665,12 +670,31 @@ function moveItem(from, to, slot)
 
 	local fromType, fromID = getType(from), tonumber(getID(from))
 	local toType, toID = getType(to), tonumber(getID(to))
-	if fromType == 255 or toType == 255 or not fromID or not toID then
-		return false, "Invalid inventory owner"
+	itemIndex = tonumber(itemIndex)
+	if fromType == 255 or toType == 255 or not fromID or not toID
+		or fromID < 0 or toID < 0 or not itemIndex or itemIndex < 1
+		or itemIndex ~= math.floor(itemIndex) then
+		return false, "Invalid inventory owner or item index"
 	end
+
+	-- A cached slot may have become stale after a previous transfer or failed transaction.
+	local currentOwnerRow = mysql:query_fetch_assoc("SELECT `index` FROM items WHERE `index` = "
+		.. itemIndex .. " AND type = " .. fromType .. " AND owner = " .. fromID .. " LIMIT 1")
+	if not currentOwnerRow then return false, "Item is no longer owned by the source inventory" end
+
 	local query = mysql:query_free("UPDATE items SET type = " .. toType .. ", owner = " .. toID
-		.. " WHERE `index` = " .. tonumber(itemIndex) .. " AND type = " .. fromType .. " AND owner = " .. fromID)
+		.. " WHERE `index` = " .. itemIndex .. " AND type = " .. fromType .. " AND owner = " .. fromID)
 	if not query then return false, "MySQL-Query failed." end
+
+	local movedOwnerRow = mysql:query_fetch_assoc("SELECT `index` FROM items WHERE `index` = "
+		.. itemIndex .. " AND type = " .. toType .. " AND owner = " .. toID .. " LIMIT 1")
+	if not movedOwnerRow then
+		if not mysql:query_free("UPDATE items SET type = " .. fromType .. ", owner = " .. fromID
+			.. " WHERE `index` = " .. itemIndex .. " AND type = " .. toType .. " AND owner = " .. toID) then
+			outputDebugString("[item-system] Failed to roll back inventory owner change for item #" .. itemIndex, 1)
+		end
+		return false, "Inventory transfer could not be verified"
+	end
 
 	table.remove(saveditems[from], slot)
 	saveditems[to][#saveditems[to] + 1] = { itemID, itemValue, itemIndex, protected, metadata }
