@@ -136,6 +136,35 @@ end
 addCommandHandler("togpick" ,toggleDropPick)
 
 function dropItem(itemID, x, y, z, ammo, keepammo, cancelAnim)
+	if client and client ~= source then return false end
+	if not isElement(source) or getElementType(source) ~= "player"
+		or tonumber(getElementData(source, "loggedin")) ~= 1 then return false end
+	itemID = tonumber(itemID)
+	x, y, z = tonumber(x), tonumber(y), tonumber(z)
+	if not itemID or itemID ~= math.floor(itemID)
+		or not x or not y or not z
+		or x ~= x or y ~= y or z ~= z
+		or x == math.huge or x == -math.huge or y == math.huge or y == -math.huge or z == math.huge or z == -math.huge
+		or math.abs(x) > 3000 or math.abs(y) > 3000 or z < -100 or z > 2000 then
+		triggerClientEvent(source, "finishItemDrop", source)
+		return false
+	end
+	local px, py, pz = getElementPosition(source)
+	if getDistanceBetweenPoints3D(px, py, pz, x, y, z) > 5 then
+		outputChatBox("You cannot drop an item that far away.", source, 255, 0, 0)
+		triggerClientEvent(source, "finishItemDrop", source)
+		return false
+	end
+	if ammo ~= nil then
+		ammo = tonumber(ammo)
+		keepammo = tonumber(keepammo) or 0
+		if itemID < 1 or itemID > 46 or not getWeaponNameFromID(itemID)
+			or not ammo or ammo < 1 or ammo ~= math.floor(ammo)
+			or keepammo < 0 or keepammo ~= math.floor(keepammo) or keepammo > 10000 then
+			triggerClientEvent(source, "finishItemDrop", source)
+			return false
+		end
+	end
 	if disableCanDropPick then
 		outputChatBox("Item dropping is currently disabled. While our scripters are investigating the issue.", source, 255, 0, 0)
 		triggerClientEvent( source, "finishItemDrop", source )
@@ -156,7 +185,17 @@ function dropItem(itemID, x, y, z, ammo, keepammo, cancelAnim)
 
 	if not ammo then
 		local itemSlot = itemID
-		local itemID, itemValue, itemIndex, itemProtected, metadata = unpack( getItems( source )[ itemSlot ] )
+		if itemSlot < 1 or itemSlot ~= math.floor(itemSlot) or not loadItems(source) then
+			triggerClientEvent(source, "finishItemDrop", source)
+			return false
+		end
+		local inventory = getItems(source)
+		local selectedItem = type(inventory) == "table" and inventory[itemSlot] or nil
+		if type(selectedItem) ~= "table" then
+			triggerClientEvent(source, "finishItemDrop", source)
+			return false
+		end
+		local itemID, itemValue, itemIndex, itemProtected, metadata = unpack(selectedItem)
 
 		--ANTI ALT-ALT
 		if not exports.global:isStaffOnDuty(source) then
@@ -373,7 +412,14 @@ function dropItem(itemID, x, y, z, ammo, keepammo, cancelAnim)
 
 
 				local rx, ry, rz, zoffset = getItemRotInfo(itemID, itemValue)
-				local obj = exports['item-world']:createItem(id, itemID, itemValue, modelid, x, y, z + zoffset - 0.05, rx, ry, rz+rz2)
+				local obj = exports["item-world"]:createItem(id, itemID, itemValue, modelid, x, y, z + zoffset - 0.05, rx, ry, rz + rz2)
+				if not isElement(obj) then
+					mysql:query_free("DELETE FROM worlditems WHERE id = " .. tonumber(id) .. " LIMIT 1")
+					if itemID == 134 then exports.global:giveMoney(source, tonumber(itemValue)) end
+					outputChatBox("The world item could not be created. Your item was returned.", source, 255, 0, 0)
+					triggerClientEvent(source, "finishItemDrop", source)
+					return false
+				end
 				exports.pool:allocateElement(obj)
 
 				setElementInterior(obj, interior)
@@ -408,9 +454,13 @@ function dropItem(itemID, x, y, z, ammo, keepammo, cancelAnim)
 
 				exports.anticheat:changeProtectedElementDataEx(obj, "metadata", metadata)
 
-				--TAKE WAY WHAT HAS DROPPED
-				if itemID ~= 134 then
-					takeItemFromSlot( source, itemSlot )
+				-- Remove the source item only after the world object exists.
+				if itemID ~= 134 and not takeItemFromSlot(source, itemSlot) then
+					mysql:query_free("DELETE FROM worlditems WHERE id = " .. tonumber(id) .. " LIMIT 1")
+					destroyElement(obj)
+					outputChatBox("The item could not be removed from your inventory; the drop was cancelled.", source, 255, 0, 0)
+					triggerClientEvent(source, "finishItemDrop", source)
+					return false
 				end
 
 				exports.logs:dbLog(source, 39, source, getPlayerName(source) .. " -> ~World #" .. getElementID(obj) .. " - " .. getItemName( itemID, itemValue, metadata ) .. " - " .. itemValue .. " @ ("..x..", "..y..", "..z..") in (int "..interior..", dim "..dimension..")" )
@@ -440,6 +490,14 @@ function dropItem(itemID, x, y, z, ammo, keepammo, cancelAnim)
 				elseif (not cancelAnim) then
 					triggerEvent('sendAme', source, "dropped a " .. getItemName( itemID, itemValue, metadata ) .. ".")
 				end
+			else
+				if itemID == 134 and not exports.global:giveMoney(source, tonumber(itemValue)) then
+					outputDebugString("[item-system] Failed to refund cash after world item insert failure for " .. getPlayerName(source), 1)
+					outputChatBox("The cash drop failed and the refund could not be completed. Contact staff.", source, 255, 0, 0)
+				else
+					outputChatBox("The item could not be dropped. Please try again.", source, 255, 0, 0)
+				end
+				triggerClientEvent(source, "finishItemDrop", source)
 			end
 		end
 	else
