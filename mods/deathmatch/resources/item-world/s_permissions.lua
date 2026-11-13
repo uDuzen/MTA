@@ -13,6 +13,15 @@ local function canManageWorldItem(player, object)
 		or not isWorldItemObject(object) then
 		return false
 	end
+	if getElementDimension(player) ~= getElementDimension(object)
+		or getElementInterior(player) ~= getElementInterior(object) then
+		return false
+	end
+	local px, py, pz = getElementPosition(player)
+	local ox, oy, oz = getElementPosition(object)
+	if getDistanceBetweenPoints3D(px, py, pz, ox, oy, oz) > 10 then
+		return false
+	end
 	return exports["item-world"]:canEditItemProperties(player, object) == true
 end
 
