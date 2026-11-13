@@ -1209,7 +1209,9 @@ function showItem(itemName)
 	local ownsItem = false
 	if type(items) == "table" then
 		for _, item in ipairs(items) do
-			if getItemName(item[1], item[2], item[5]) == itemName then
+			local baseName = tostring(getItemName(item[1], item[2], item[5]) or "")
+			-- The inventory UI appends descriptive details for notes, cards and similar items.
+			if itemName == baseName or (itemName:sub(1, #baseName + 2) == baseName .. ", ") then
 				ownsItem = true
 				break
 			end
