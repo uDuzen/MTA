@@ -529,13 +529,21 @@ function dropItem(itemID, x, y, z, ammo, keepammo, cancelAnim)
 
 			if itemID == 100 then
 				z = z + 0.1
-				setPedArmor(source, 0)
 			end
 
-			local weaponSlot = itemID == 100 and nil or getSlotFromWeapon(itemID)
-			local previousAmmo = weaponSlot and getPedTotalAmmo(source, weaponSlot) or getPedArmor(source)
-			local previousClip = weaponSlot and getPedAmmoInClip(source, weaponSlot) or 0
-			if not previousAmmo or ammo > previousAmmo then
+			local weaponSlot
+			local previousAmmo
+			if itemID == 100 then
+				previousAmmo = getPedArmor(source)
+			else
+				weaponSlot = getSlotFromWeapon(itemID)
+				if not weaponSlot or weaponSlot < 1 then
+					triggerClientEvent(source, "finishItemDrop", source)
+					return false
+				end
+				previousAmmo = getPedTotalAmmo(source, weaponSlot)
+			end
+			if not previousAmmo or ammo + keepammo > previousAmmo then
 				outputChatBox("You do not have that amount of ammunition to drop.", source, 255, 0, 0)
 				triggerClientEvent(source, "finishItemDrop", source)
 				return false
