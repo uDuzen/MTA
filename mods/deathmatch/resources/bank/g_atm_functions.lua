@@ -188,7 +188,7 @@ function areYouAltAlting(thePlayer, cardInfo, targetID)
 	if comparisonID == playerCharacterID then return false end
 
 	local comparison = getCharacterAccountAndSerial(comparisonID)
-	if not comparison then return false end
+	if not comparison then return nil end
 	if tonumber(comparison.account) == accountID then
 		return "between alts"
 	end
