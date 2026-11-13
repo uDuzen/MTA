@@ -20,7 +20,7 @@ function punishPlayer(thePlayer, commandName, target, points, repetitive, ...)
 			return
 		end
 
-		if not tonumber(points) or tonumber(points) <= 0 or math.floor(tonumber(points)) ~= tonumber(points) then
+		if not tonumber(points) or tonumber(points) ~= tonumber(points) or tonumber(points) <= 0 or tonumber(points) > 20 or math.floor(tonumber(points)) ~= tonumber(points) then
 			outputChatBox("Error: Points must be a positive whole number (ex: 2, 4).", thePlayer, 255, 0, 0)
 			return
 		end
@@ -49,7 +49,7 @@ function punishPlayer(thePlayer, commandName, target, points, repetitive, ...)
 		end
 		-- End command usage check
 
-		local reason = table.concat({...}," ")
+		local reason = table.concat({...}, " "):gsub("[%c]", " "):sub(1, 255)
 		local currentPoints = tonumber(getElementData(targetPlayer, "punishment:points")) or 0
 
 		if currentPoints == 0 or getElementData(targetPlayer, "punishment:date") == nil then
@@ -59,7 +59,11 @@ function punishPlayer(thePlayer, commandName, target, points, repetitive, ...)
 				return false
 			end
 		elseif currentPoints > 0 then
-			currentPoints = checkExpiration(targetPlayer)
+			currentPoints = tonumber(checkExpiration(targetPlayer))
+			if not currentPoints then
+				outputChatBox("ERROR: #PUNISH03 - bugs.owlgaming.net", thePlayer, 255, 0, 0)
+				return false
+			end
 		end
 
 		local newPoints = tonumber(points) + currentPoints
@@ -79,7 +83,7 @@ function punishPlayer(thePlayer, commandName, target, points, repetitive, ...)
 			outputChatBox("[PUNISH-SILENCED]: Reason: " .. reason, targetPlayer, 255, 0, 0)
 		else
 			for index, player in pairs( exports.pool:getPoolElementsByType("player")) do
-				if tonumber( getElementData( player, "punishment_notification_selector") ) ~= 1 or player == admin or player == targetPlayer then
+				if tonumber( getElementData( player, "punishment_notification_selector") ) ~= 1 or player == thePlayer or player == targetPlayer then
 					outputChatBox("[PUNISH]: "..adminTitle.." issued "..points.." points to "..targetPlayerName..".", player, 255, 0, 0)
 					outputChatBox("[PUNISH]: Reason: " .. reason, player, 255, 0, 0)
 				end
@@ -102,7 +106,7 @@ function offlinePunishPlayer(thePlayer, commandName, target, points, repetitive,
 			return
 		end
 
-		if not tonumber(points) or tonumber(points) <= 0 or math.floor(tonumber(points)) ~= tonumber(points) then
+		if not tonumber(points) or tonumber(points) ~= tonumber(points) or tonumber(points) <= 0 or tonumber(points) > 20 or math.floor(tonumber(points)) ~= tonumber(points) then
 			outputChatBox("Error: Points must be a positive whole number (ex: 2, 4).", thePlayer, 255, 0, 0)
 			return
 		end
@@ -122,7 +126,7 @@ function offlinePunishPlayer(thePlayer, commandName, target, points, repetitive,
 		-- End command usage check
 
 		-- If player is still online
-		local reason = table.concat({...}, " ")
+		local reason = table.concat({...}, " "):gsub("[%c]", " "):sub(1, 255)
 		for _, player in ipairs(exports.pool:getPoolElementsByType("player")) do
 			if tostring(target):lower() == tostring(getElementData(player, "account:username")):lower() then
 				local commandNameTemp = "punish"
