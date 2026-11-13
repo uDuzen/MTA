@@ -487,43 +487,71 @@ function hasBankMoney(thePlayer, amount)
 	return balance >= safeAmount
 end
 
+local function getStoredBankBalance(accountType, accountID)
+	local tableName = accountType == "player" and "characters" or "factions"
+	local columnName = accountType == "player" and "bankmoney" or "bankbalance"
+	local row = mysql:query_fetch_assoc("SELECT `" .. columnName .. "` AS balance FROM `" .. tableName
+		.. "` WHERE id = " .. accountID .. " LIMIT 1")
+	local balance = row and tonumber(row.balance)
+	if not balance or balance ~= balance or balance == math.huge or balance == -math.huge then
+		return false
+	end
+	return balance
+end
+
+local function updateBankBalance(thePlayer, accountType, accountID, balanceKey, oldBalance, newBalance)
+	local tableName = accountType == "player" and "characters" or "factions"
+	local columnName = accountType == "player" and "bankmoney" or "bankbalance"
+	if not mysql:query_free("UPDATE `" .. tableName .. "` SET `" .. columnName .. "` = " .. newBalance
+		.. " WHERE id = " .. accountID .. " AND `" .. columnName .. "` = " .. oldBalance) then
+		return false
+	end
+	if getStoredBankBalance(accountType, accountID) ~= newBalance then
+		return false
+	end
+	if not setElementDataEx(thePlayer, balanceKey, newBalance, true) then
+		if not mysql:query_free("UPDATE `" .. tableName .. "` SET `" .. columnName .. "` = " .. oldBalance
+			.. " WHERE id = " .. accountID .. " AND `" .. columnName .. "` = " .. newBalance) then
+			outputDebugString("[BANK] Failed to roll back bank balance for account #" .. accountID, 1)
+		end
+		return false
+	end
+	return true
+end
+
 function takeBankMoney(thePlayer, amount, force)
 	local accountType, safeAmount, accountID = validateBankAccountTarget(thePlayer, amount)
 	if not accountType then return false end
 	local balanceKey = accountType == "player" and "bankmoney" or "money"
-	local balance = tonumber(getElementData(thePlayer, balanceKey)) or 0
-	if not force and balance < safeAmount then return false, "Lack of money in bank" end
-	local tableName = accountType == "player" and "characters" or "factions"
-	local columnName = accountType == "player" and "bankmoney" or "bankbalance"
-	local query = "UPDATE `" .. tableName .. "` SET `" .. columnName .. "` = `" .. columnName .. "` - ? WHERE `id` = ?"
-	if not dbExec(mysql:getConn("mta"), query, safeAmount, accountID) then return false end
-	setElementDataEx(thePlayer, balanceKey, balance - safeAmount, true)
-	return true
+	local currentElementBalance = tonumber(getElementData(thePlayer, balanceKey)) or 0
+	local currentStoredBalance = getStoredBankBalance(accountType, accountID)
+	if currentStoredBalance == false or currentStoredBalance ~= currentElementBalance then
+		return false
+	end
+	if not force and currentStoredBalance < safeAmount then return false, "Lack of money in bank" end
+	local newBalance = currentStoredBalance - safeAmount
+	if newBalance < 0 and not force then return false end
+	return updateBankBalance(thePlayer, accountType, accountID, balanceKey, currentStoredBalance, newBalance)
 end
 
 function giveBankMoney(thePlayer, amount)
 	local accountType, safeAmount, accountID = validateBankAccountTarget(thePlayer, amount)
 	if not accountType then return false end
 	local balanceKey = accountType == "player" and "bankmoney" or "money"
-	local balance = tonumber(getElementData(thePlayer, balanceKey)) or 0
-	local tableName = accountType == "player" and "characters" or "factions"
-	local columnName = accountType == "player" and "bankmoney" or "bankbalance"
-	if not dbExec(mysql:getConn("mta"), "UPDATE `" .. tableName .. "` SET `" .. columnName .. "` = `" .. columnName .. "` + ? WHERE `id` = ?", safeAmount, accountID) then
-		return false
-	end
-	setElementDataEx(thePlayer, balanceKey, balance + safeAmount, true)
-	return true
+	local currentElementBalance = tonumber(getElementData(thePlayer, balanceKey)) or 0
+	local currentStoredBalance = getStoredBankBalance(accountType, accountID)
+	if currentStoredBalance == false or currentStoredBalance ~= currentElementBalance then return false end
+	local newBalance = currentStoredBalance + safeAmount
+	if newBalance > 2000000000 then return false end
+	return updateBankBalance(thePlayer, accountType, accountID, balanceKey, currentStoredBalance, newBalance)
 end
 
 function setBankMoney(thePlayer, amount)
 	local accountType, safeAmount, accountID = validateBankAccountTarget(thePlayer, amount)
 	if not accountType then return false end
 	local balanceKey = accountType == "player" and "bankmoney" or "money"
-	local tableName = accountType == "player" and "characters" or "factions"
-	local columnName = accountType == "player" and "bankmoney" or "bankbalance"
-	if not dbExec(mysql:getConn("mta"), "UPDATE `" .. tableName .. "` SET `" .. columnName .. "` = ? WHERE `id` = ?", safeAmount, accountID) then
-		return false
-	end
-	setElementDataEx(thePlayer, balanceKey, safeAmount, true)
-	return true
+	local currentElementBalance = tonumber(getElementData(thePlayer, balanceKey)) or 0
+	local currentStoredBalance = getStoredBankBalance(accountType, accountID)
+	if currentStoredBalance == false or currentStoredBalance ~= currentElementBalance then return false end
+	return updateBankBalance(thePlayer, accountType, accountID, balanceKey, currentStoredBalance, safeAmount)
 end
