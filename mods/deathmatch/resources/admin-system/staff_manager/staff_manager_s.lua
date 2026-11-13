@@ -10,6 +10,15 @@
 local mysql = exports.mysql
 local staffTitles = exports.integration:getStaffTitles()
 
+local function getStaffTitle(teamID, rank)
+	local teamTitles = staffTitles[teamID]
+	local rankID = tonumber(rank) or 0
+	if type(teamTitles) == "table" and teamTitles[rankID] then
+		return tostring(teamTitles[rankID])
+	end
+	return rankID == 0 and "Not Staff" or ("Rank " .. rankID)
+end
+
 local function canManageStaff(player)
 	return isElement(player) and (exports.integration:isPlayerSeniorAdmin(player)
 		or exports.integration:isPlayerVehicleConsultant(player)
@@ -209,8 +218,8 @@ function editStaff(userid, ranks, details)
 			if ranks[1] and ranks[1] ~= tonumber(user.admin) then
 				tail = tail.."admin="..ranks[1]..","
 				mysql:query_free("INSERT INTO staff_changelogs SET userid="..userid..", details="..details..", `by`="..adminAccountID..", team=1, from_rank="..user.admin..", to_rank="..ranks[1])
-				exports.global:sendMessageToStaff("[STAFF UPDATE] "..exports.global:getPlayerFullIdentity(thePlayer, 1, true).." has "..(ranks[1] > tonumber(user.admin) and "promoted" or "demoted").." '"..user.username.."' from "..staffTitles[1][tonumber(user.admin)].." to "..staffTitles[1][ranks[1]]..".", true)
-				exports.announcement:makePlayerNotification(target or user.id, "Staff Rank Updated", exports.global:getPlayerFullIdentity(thePlayer, 1, true).." has "..(ranks[1] > tonumber(user.admin) and "promoted" or "demoted").." you from "..staffTitles[1][tonumber(user.admin)].." to "..staffTitles[1][ranks[1]]..". \n" .. (ranks[1] > tonumber(user.admin) and "Congratulations!" or "Sorry!"))
+				exports.global:sendMessageToStaff("[STAFF UPDATE] "..exports.global:getPlayerFullIdentity(thePlayer, 1, true).." has "..(ranks[1] > tonumber(user.admin) and "promoted" or "demoted").." '"..user.username.."' from "..getStaffTitle(1, user.admin).." to "..getStaffTitle(1, ranks[1])..".", true)
+				exports.announcement:makePlayerNotification(target or user.id, "Staff Rank Updated", exports.global:getPlayerFullIdentity(thePlayer, 1, true).." has "..(ranks[1] > tonumber(user.admin) and "promoted" or "demoted").." you from "..getStaffTitle(1, user.admin).." to "..getStaffTitle(1, ranks[1])..". \n" .. (ranks[1] > tonumber(user.admin) and "Congratulations!" or "Sorry!"))
 				if target then exports.anticheat:changeProtectedElementDataEx(target, "admin_level", ranks[1], true) end
 				if ranks[1] == 0 then -- Remove all tickets if they get removed from admin
 					dbExec(exports.mysql:getConn("core"), "UPDATE `tc_tickets` SET `assign_to`=NULL WHERE `assign_to`=?", userid)
@@ -219,40 +228,40 @@ function editStaff(userid, ranks, details)
 			if ranks[2] and ranks[2] ~= tonumber(user.supporter) then
 				tail = tail.."supporter="..ranks[2]..","
 				mysql:query_free("INSERT INTO staff_changelogs SET userid="..userid..", details="..details..", `by`="..getElementData(thePlayer, "account:id")..", team=2, from_rank="..user.supporter..", to_rank="..ranks[2])
-				exports.global:sendMessageToStaff("[STAFF UPDATE] "..exports.global:getPlayerFullIdentity(thePlayer, 1, true).." has "..(ranks[2] > tonumber(user.supporter) and "promoted" or "demoted").." '"..user.username.."' from "..staffTitles[2][tonumber(user.supporter)].." to "..staffTitles[2][ranks[2]]..".", true)
-				exports.announcement:makePlayerNotification(target or user.id, "Staff Rank Updated", exports.global:getPlayerFullIdentity(thePlayer, 1, true).." has "..(ranks[2] > tonumber(user.supporter) and "promoted" or "demoted").." you from "..staffTitles[2][tonumber(user.supporter)].." to "..staffTitles[2][ranks[2]]..". \n" .. (ranks[2] > tonumber(user.supporter) and "Congratulations!" or "Sorry!"))
+				exports.global:sendMessageToStaff("[STAFF UPDATE] "..exports.global:getPlayerFullIdentity(thePlayer, 1, true).." has "..(ranks[2] > tonumber(user.supporter) and "promoted" or "demoted").." '"..user.username.."' from "..getStaffTitle(2, user.supporter).." to "..getStaffTitle(2, ranks[2])..".", true)
+				exports.announcement:makePlayerNotification(target or user.id, "Staff Rank Updated", exports.global:getPlayerFullIdentity(thePlayer, 1, true).." has "..(ranks[2] > tonumber(user.supporter) and "promoted" or "demoted").." you from "..getStaffTitle(2, user.supporter).." to "..getStaffTitle(2, ranks[2])..". \n" .. (ranks[2] > tonumber(user.supporter) and "Congratulations!" or "Sorry!"))
 				if target then exports.anticheat:changeProtectedElementDataEx(target, "supporter_level", ranks[2], true) end
 		
 			end
 			if ranks[3] and ranks[3] ~= tonumber(user.vct) then
 				tail = tail.."vct="..ranks[3]..","
 				mysql:query_free("INSERT INTO staff_changelogs SET userid="..userid..", details="..details..", `by`="..getElementData(thePlayer, "account:id")..", team=3, from_rank="..user.vct..", to_rank="..ranks[3])
-				exports.global:sendMessageToStaff("[STAFF UPDATE] "..exports.global:getPlayerFullIdentity(thePlayer, 1, true).." has "..(ranks[3] > tonumber(user.vct) and "promoted" or "demoted").." '"..user.username.."' from "..staffTitles[3][tonumber(user.vct)].." to "..staffTitles[3][ranks[3]]..".", true)
-				exports.announcement:makePlayerNotification(target or user.id, "Staff Rank Updated", exports.global:getPlayerFullIdentity(thePlayer, 1, true).." has "..(ranks[3] > tonumber(user.vct) and "promoted" or "demoted").." you from "..staffTitles[3][tonumber(user.vct)].." to "..staffTitles[3][ranks[3]]..". \n" .. (ranks[3] > tonumber(user.vct) and "Congratulations!" or "Sorry!"))
+				exports.global:sendMessageToStaff("[STAFF UPDATE] "..exports.global:getPlayerFullIdentity(thePlayer, 1, true).." has "..(ranks[3] > tonumber(user.vct) and "promoted" or "demoted").." '"..user.username.."' from "..getStaffTitle(3, user.vct).." to "..getStaffTitle(3, ranks[3])..".", true)
+				exports.announcement:makePlayerNotification(target or user.id, "Staff Rank Updated", exports.global:getPlayerFullIdentity(thePlayer, 1, true).." has "..(ranks[3] > tonumber(user.vct) and "promoted" or "demoted").." you from "..getStaffTitle(3, user.vct).." to "..getStaffTitle(3, ranks[3])..". \n" .. (ranks[3] > tonumber(user.vct) and "Congratulations!" or "Sorry!"))
 				if target then exports.anticheat:changeProtectedElementDataEx(target, "vct_level", ranks[3], true) end
 		
 			end
 			if ranks[4] and ranks[4] ~= tonumber(user.scripter) then
 				tail = tail.."scripter="..ranks[4]..","
 				mysql:query_free("INSERT INTO staff_changelogs SET userid="..userid..", details="..details..", `by`="..getElementData(thePlayer, "account:id")..", team=4, from_rank="..user.scripter..", to_rank="..ranks[4])
-				exports.global:sendMessageToStaff("[STAFF UPDATE] "..exports.global:getPlayerFullIdentity(thePlayer, 1, true).." has "..(ranks[4] > tonumber(user.scripter) and "promoted" or "demoted").." '"..user.username.."' from "..staffTitles[4][tonumber(user.scripter)].." to "..staffTitles[4][ranks[4]]..".", true)
-				exports.announcement:makePlayerNotification(target or user.id, "Staff Rank Updated", exports.global:getPlayerFullIdentity(thePlayer, 1, true).." has "..(ranks[4] > tonumber(user.scripter) and "promoted" or "demoted").." you from "..staffTitles[4][tonumber(user.scripter)].." to "..staffTitles[4][ranks[4]]..". \n" .. (ranks[4] > tonumber(user.scripter) and "Congratulations!" or "Sorry!"))
+				exports.global:sendMessageToStaff("[STAFF UPDATE] "..exports.global:getPlayerFullIdentity(thePlayer, 1, true).." has "..(ranks[4] > tonumber(user.scripter) and "promoted" or "demoted").." '"..user.username.."' from "..getStaffTitle(4, user.scripter).." to "..getStaffTitle(4, ranks[4])..".", true)
+				exports.announcement:makePlayerNotification(target or user.id, "Staff Rank Updated", exports.global:getPlayerFullIdentity(thePlayer, 1, true).." has "..(ranks[4] > tonumber(user.scripter) and "promoted" or "demoted").." you from "..getStaffTitle(4, user.scripter).." to "..getStaffTitle(4, ranks[4])..". \n" .. (ranks[4] > tonumber(user.scripter) and "Congratulations!" or "Sorry!"))
 				if target then exports.anticheat:changeProtectedElementDataEx(target, "scripter_level", ranks[4], true) end
 		
 			end
 			if ranks[5] and ranks[5] ~= tonumber(user.mapper) then
 				tail = tail.."mapper="..ranks[5]..","
 				mysql:query_free("INSERT INTO staff_changelogs SET userid="..userid..", details="..details..", `by`="..getElementData(thePlayer, "account:id")..", team=5, from_rank="..user.mapper..", to_rank="..ranks[5])
-				exports.global:sendMessageToStaff("[STAFF UPDATE] "..exports.global:getPlayerFullIdentity(thePlayer, 1, true).." has "..(ranks[5] > tonumber(user.mapper) and "promoted" or "demoted").." '"..user.username.."' from "..staffTitles[5][tonumber(user.mapper)].." to "..staffTitles[5][ranks[5]]..".", true)
-				exports.announcement:makePlayerNotification(target or user.id, "Staff Rank Updated", exports.global:getPlayerFullIdentity(thePlayer, 1, true).." has "..(ranks[5] > tonumber(user.mapper) and "promoted" or "demoted").." you from "..staffTitles[5][tonumber(user.mapper)].." to "..staffTitles[5][ranks[5]]..". \n" .. (ranks[5] > tonumber(user.mapper) and "Congratulations!" or "Sorry!"))
+				exports.global:sendMessageToStaff("[STAFF UPDATE] "..exports.global:getPlayerFullIdentity(thePlayer, 1, true).." has "..(ranks[5] > tonumber(user.mapper) and "promoted" or "demoted").." '"..user.username.."' from "..getStaffTitle(5, user.mapper).." to "..getStaffTitle(5, ranks[5])..".", true)
+				exports.announcement:makePlayerNotification(target or user.id, "Staff Rank Updated", exports.global:getPlayerFullIdentity(thePlayer, 1, true).." has "..(ranks[5] > tonumber(user.mapper) and "promoted" or "demoted").." you from "..getStaffTitle(5, user.mapper).." to "..getStaffTitle(5, ranks[5])..". \n" .. (ranks[5] > tonumber(user.mapper) and "Congratulations!" or "Sorry!"))
 				if target then exports.anticheat:changeProtectedElementDataEx(target, "mapper_level", ranks[5], true) end
 		
 			end
 			if ranks[6] and ranks[6] ~= tonumber(user.fmt) then
 				tail = tail.."fmt="..ranks[6]..","
 				mysql:query_free("INSERT INTO staff_changelogs SET userid="..userid..", details="..details..", `by`="..getElementData(thePlayer, "account:id")..", team=6, from_rank="..user.fmt..", to_rank="..ranks[6])
-				exports.global:sendMessageToStaff("[STAFF UPDATE] "..exports.global:getPlayerFullIdentity(thePlayer, 1, true).." has "..(ranks[6] > tonumber(user.fmt) and "promoted" or "demoted").." '"..user.username.."' from "..staffTitles[6][tonumber(user.fmt)].." to "..staffTitles[6][ranks[6]]..".", true)
-				exports.announcement:makePlayerNotification(target or user.id, exports.global:getPlayerFullIdentity(thePlayer, 1, true).." has "..(ranks[6] > tonumber(user.fmt) and "promoted" or "demoted").." you from "..staffTitles[6][tonumber(user.fmt)].." to "..staffTitles[6][ranks[6]]..".", (ranks[6] > tonumber(user.fmt) and "Congratulations!" or "Sorry!"))
+				exports.global:sendMessageToStaff("[STAFF UPDATE] "..exports.global:getPlayerFullIdentity(thePlayer, 1, true).." has "..(ranks[6] > tonumber(user.fmt) and "promoted" or "demoted").." '"..user.username.."' from "..getStaffTitle(6, user.fmt).." to "..getStaffTitle(6, ranks[6])..".", true)
+				exports.announcement:makePlayerNotification(target or user.id, exports.global:getPlayerFullIdentity(thePlayer, 1, true).." has "..(ranks[6] > tonumber(user.fmt) and "promoted" or "demoted").." you from "..getStaffTitle(6, user.fmt).." to "..getStaffTitle(6, ranks[6])..".", (ranks[6] > tonumber(user.fmt) and "Congratulations!" or "Sorry!"))
 				if target then exports.anticheat:changeProtectedElementDataEx(target, "fmt_level", ranks[6], true) end
 		
 			end
