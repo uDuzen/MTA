@@ -575,6 +575,7 @@ function updateTable(newTable, changesTable)
 	dutyAllow = newTable
 	dutyAllowChanges = changesTable
 	if not saveChanges() then
+		dutyAllow = previousDutyAllow
 		outputChatBox("Some duty permissions could not be saved. The changes remain pending; please retry or contact a scripter.", player, 255, 0, 0)
 		return false
 	end
