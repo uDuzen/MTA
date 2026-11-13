@@ -69,6 +69,8 @@ local function restoreMoneyItems(player, values)
 end
 
 local function removeMoneyItems(player)
+	local loaded = exports["item-system"]:loadItems(player)
+	if not loaded then return false, {} end
 	local inventory = exports["item-system"]:getItems(player)
 	if type(inventory) ~= "table" then return false, {} end
 	local values = {}
