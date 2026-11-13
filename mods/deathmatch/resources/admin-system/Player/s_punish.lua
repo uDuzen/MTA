@@ -137,17 +137,17 @@ function offlinePunishPlayer(thePlayer, commandName, target, points, repetitive,
 		-- Otherwise actually offline
 		local qh = dbQuery(exports.mysql:getConn('core'), "SELECT id, username, ip, punishdate, punishpoints FROM accounts WHERE `username`=? LIMIT 1", target)
 		local result = dbPoll(qh, 10000)
+		local accID, punishdate, ip, serial
 		if result and #result > 0 then
-			local accID = tonumber(result[1].id)
-			local punishdate = result[1].punishdate
-			local punishpoints = tonumber(result[1].punishpoints) or 0
+			accID = tonumber(result[1].id)
+			punishdate = result[1].punishdate
 			target = result[1].username
-			local ip = result[1].ip
+			ip = result[1].ip
 
 			local qh2 = dbQuery(exports.mysql:getConn('mta'), "SELECT mtaserial FROM account_details WHERE `account_id`=? LIMIT 1", accID)
 			local result2 = dbPoll(qh2, 1000)
 			if result2 and #result2 > 0 then
-				local serial = result2[1].mtaserial
+				serial = result2[1].mtaserial
 			end
 		else
 			outputChatBox("Error: Username not found!", thePlayer, 255, 0, 0)
@@ -159,6 +159,7 @@ function offlinePunishPlayer(thePlayer, commandName, target, points, repetitive,
 			local result2 = sqlSetDate(accID)
 			if not result2 then
 				outputChatBox("ERROR: #PUNISH02 - bugs.owlgaming.net", thePlayer)
+				return false
 			end
 		else
 			currentPoints = checkExpiration(false, accID)
@@ -171,11 +172,16 @@ function offlinePunishPlayer(thePlayer, commandName, target, points, repetitive,
 			local result2 = sqlSetDate(accID)
 			if not result2 then
 				outputChatBox("ERROR: #PUNISH02 - bugs.owlgaming.net", thePlayer, 255, 0, 0)
+				return false
 			end
 		end
 
-		local result = sqlAddPoints(thePlayer, accID, tonumber(points) + tonumber(currentPoints)) -- update sql as well!
-		if not result then outputChatBox("Oops! Something went wrong!", thePlayer, 255, 0, 0) end
+		local newPoints = tonumber(points) + tonumber(currentPoints)
+		local result = sqlAddPoints(thePlayer, accID, newPoints)
+		if not result then
+			outputChatBox("Oops! Something went wrong; punishment points were not changed.", thePlayer, 255, 0, 0)
+			return false
+		end
 
 		-- Tell the world
 		local adminTitle = exports.global:getAdminTitle1(thePlayer)
