@@ -9,6 +9,7 @@
 
 dutyAllow = { }
 dutyAllowChanges = { }
+local dutyAdminEditor = nil
 
 function adminSetPlayerFaction(thePlayer, commandName, partialNick, factionID)
 	if exports.integration:isPlayerTrialAdmin(thePlayer) or exports.integration:isPlayerFMTLeader(thePlayer) then
@@ -421,41 +422,39 @@ addCommandHandler("respawnfaction", respawnFactionVehicles, false, false)
 -- // Chaos - Script stealers go away, make something for yourself.
 function adminDutyStart()
 	local result = mysql:query("SELECT id, name FROM factions WHERE type >= 2 ORDER BY id ASC")
-	local max = mysql:query("SELECT id FROM duty_allowed ORDER BY id DESC LIMIT 0, 1")
-	if result and max then
-		local maxrow = mysql:fetch_assoc(max)
-		maxIndex = type(maxrow) == 'table' and tonumber(maxrow.id) or 0
+	local maxResult = mysql:query("SELECT id FROM duty_allowed ORDER BY id DESC LIMIT 0, 1")
+	if not result or not maxResult then
+		if result then mysql:free_result(result) end
+		if maxResult then mysql:free_result(maxResult) end
+		outputDebugString("[Factions] ERROR: Duty allow permissions failed.")
+		return false
+	end
 
-		while true do
-			local row = mysql:fetch_assoc(result)
-			if not row then break end
-
-			dutyAllow[tonumber(row.id)] = { row.id, row.name, { --[[Duty information]] } }
-			--table.insert(dutyAllow, { row.id, row.name, { --[[Duty information]] } })
-			--i = i+1
-
-			local result1 = mysql:query("SELECT * FROM duty_allowed WHERE faction="..tonumber(row.id))
-			if result1 then
+	local maxRow = mysql:fetch_assoc(maxResult)
+	local maxIndex = type(maxRow) == "table" and tonumber(maxRow.id) or 0
+	while true do
+		local row = mysql:fetch_assoc(result)
+		if not row then break end
+		local factionID = tonumber(row.id)
+		if factionID then
+			dutyAllow[factionID] = { factionID, row.name, {} }
+			local itemResult = mysql:query("SELECT * FROM duty_allowed WHERE faction = " .. factionID)
+			if itemResult then
 				while true do
-					local row1 = mysql:fetch_assoc(result1)
-					if not row1 then break end
-
-					table.insert(dutyAllow[tonumber(row.id)][3], { row1.id, tonumber(row1.itemID), row1.itemValue })
+					local itemRow = mysql:fetch_assoc(itemResult)
+					if not itemRow then break end
+					table.insert(dutyAllow[factionID][3], { tonumber(itemRow.id), tonumber(itemRow.itemID), itemRow.itemValue })
 				end
+				mysql:free_result(itemResult)
 			end
 		end
-
-		setElementData(resourceRoot, "maxIndex", maxIndex)
-		setElementData(resourceRoot, "dutyAllowTable", dutyAllow)
-		mysql:free_result(result)
-		mysql:free_result(result1)
-		mysql:free_result(max)
-	else
-		outputDebugString("[Factions] ERROR: Duty allow permissions failed.")
 	end
+	mysql:free_result(result)
+	mysql:free_result(maxResult)
+	setElementData(resourceRoot, "maxIndex", maxIndex)
+	setElementData(resourceRoot, "dutyAllowTable", dutyAllow)
+	return true
 end
---addEventHandler("onResourceStart", resourceRoot, adminDutyStart)
-
 function getAllowList(factionID)
 	local factionID = tonumber(factionID)
 	if factionID and dutyAllow[factionID] then
@@ -469,7 +468,8 @@ function adminDuty(thePlayer)
 	if (exports.integration:isPlayerLeadAdmin(thePlayer) or exports.integration:isPlayerScripter(thePlayer) or exports.integration:isPlayerFMTLeader(thePlayer)) then
 		if not getElementData(resourceRoot, "dutyadmin") and type(dutyAllow) == "table" then
 			triggerClientEvent(thePlayer, "adminDutyAllow", resourceRoot, dutyAllow, dutyAllowChanges)
-			setElementData( resourceRoot, "dutyadmin", true )
+			dutyAdminEditor = thePlayer
+			setElementData(resourceRoot, "dutyadmin", true)
 		elseif type(dutyAllow) ~= "table" then
 			outputChatBox("There was a issue with the startup caching of this resource. Contact a Scripter.", thePlayer, 255, 0, 0)
 		else
@@ -501,6 +501,7 @@ function updateTable(newTable, changesTable)
 		or not (exports.integration:isPlayerLeadAdmin(player)
 			or exports.integration:isPlayerScripter(player)
 			or exports.integration:isPlayerFMTLeader(player))
+		or player ~= dutyAdminEditor
 		or type(newTable) ~= "table" or type(changesTable) ~= "table" or #changesTable > 1000 then
 		return false
 	end
@@ -550,12 +551,20 @@ function updateTable(newTable, changesTable)
 	dutyAllow = newTable
 	dutyAllowChanges = changesTable
 	removeElementData(resourceRoot, "dutyadmin")
+	dutyAdminEditor = nil
 	setElementData(resourceRoot, "dutyAllowTable", dutyAllow)
 	exports.logs:dbLog(player, 4, player, "Has saved /dutyadmin")
 	return true
 end
 addEvent("dutyAdmin:Save", true)
 addEventHandler("dutyAdmin:Save", resourceRoot, updateTable)
+
+addEventHandler("onPlayerQuit", root, function()
+	if source == dutyAdminEditor then
+		dutyAdminEditor = nil
+		removeElementData(resourceRoot, "dutyadmin")
+	end
+end)
 
 -- Cleanup/convert functions, pretty much a 1 use only as they are now deprecated.
 
