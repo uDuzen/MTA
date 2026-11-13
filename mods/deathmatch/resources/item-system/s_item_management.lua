@@ -618,6 +618,9 @@ function moveItem(from, to, slot)
 	-- Cash items are converted to account cash, so delete the inventory row
 	-- only after the recipient has successfully received the money.
 	if itemID == 134 then
+		if getElementType(from) == "player" then
+			return false, "Player cash balance items must be transferred through the cash transfer flow"
+		end
 		local amount = tonumber(itemValue)
 		if not amount or amount ~= amount or amount == math.huge or amount <= 0 then
 			return false, "Invalid cash item value"
