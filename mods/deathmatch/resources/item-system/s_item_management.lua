@@ -282,10 +282,15 @@ function giveItem( element, itemID, itemValue, itemIndex, isThisFromSplittingOrA
 	end
 	itemValue = tostring(itemValue)
 	if #itemValue > 1024 then return false, "Item value is too long" end
-	if itemIndex ~= nil and (not tonumber(itemIndex) or tonumber(itemIndex) < 1 or tonumber(itemIndex) ~= math.floor(tonumber(itemIndex))) then
-		return false, "Invalid item index"
+	if itemIndex then
+		itemIndex = tonumber(itemIndex)
+		if not itemIndex or itemIndex < 1 or itemIndex ~= math.floor(itemIndex) then
+			return false, "Invalid item index"
+		end
+	else
+		itemIndex = nil
 	end
-	local success, error = loadItems( element )
+	local success, error = loadItems(element)
 	if success then
 		if not metadata then
 			if(detailedDebug and sourceResource) then
@@ -304,9 +309,13 @@ function giveItem( element, itemID, itemValue, itemIndex, isThisFromSplittingOrA
 				outputDebugString("giveItem: metadata:"..tostring(metadata).." (source: "..tostring(theSource)..")", 2)
 			end
 			metadata = {}
-		end		
+		end
+		local metadataJSON = toJSON(metadata)
+		if type(metadataJSON) ~= "string" or #metadataJSON > 8192 then
+			return false, "Invalid or oversized item metadata"
+		end
 
-		if not hasSpaceForItem( element, itemID, itemValue, metadata ) then
+		if not hasSpaceForItem(element, itemID, itemValue, metadata) then
 			return false, "Inventory is Full."
 		end
 
@@ -321,7 +330,7 @@ function giveItem( element, itemID, itemValue, itemIndex, isThisFromSplittingOrA
 		end
 
 		if not itemIndex then
-			local result = mysql:query_free("INSERT INTO items (type, owner, itemID, itemValue, metadata) VALUES (" .. getType( element ) .. "," .. getID( element ) .. "," .. itemID .. ",'" .. mysql:escape_string(itemValue) .. "', " .. (metadata and ("'" .. mysql:escape_string(toJSON(metadata)) .. "'") or 'NULL') .. ")")
+			local result = mysql:query_free("INSERT INTO items (type, owner, itemID, itemValue, metadata) VALUES (" .. getType( element ) .. "," .. getID( element ) .. "," .. itemID .. ",'" .. mysql:escape_string(itemValue) .. "', " .. ("'" .. mysql:escape_string(metadataJSON) .. "'") .. ")")
 			if result then
 				itemIndex = mysql:insert_id( )
 				if itemID == 178 then
@@ -380,7 +389,9 @@ end
 
 -- permanently removes an item from an element
 function takeItemFromSlot(element, slot, nosqlupdate, no_update_guns)
-	local success, error = loadItems( element )
+	slot = tonumber(slot)
+	if not slot or slot < 1 or slot ~= math.floor(slot) then return false, "Invalid item slot" end
+	local success, error = loadItems(element)
 	if success then
 		if saveditems[element][slot] then
 			local itemID = saveditems[element][slot][1]
