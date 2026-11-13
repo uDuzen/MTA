@@ -563,7 +563,7 @@ addEventHandler("items:metadata:update", root, updateMetadata)
 
 -- moves an item from any element to another element
 function moveItem2(from, to, slot)
-	moveItem(from, to, slot)
+	return moveItem(from, to, slot)
 end
 
 function moveItem(from, to, slot)
