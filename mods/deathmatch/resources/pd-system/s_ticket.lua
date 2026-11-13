@@ -21,7 +21,8 @@ addEventHandler("fetchTickets", getRootElement(), function()
 	if not characterID then return false end
 	local tickets = {}
 	local query = dbQuery(exports.mysql:getConn('mta'), "SELECT * FROM `mdc_crimes` WHERE `character` = ? ORDER BY `id` DESC", characterID)
-	local result = dbPoll(query, -1)
+	if not query then return false end
+	local result = dbPoll(query, 10000)
 	if result then
 		for rid, row in pairs (result) do
 			if string.find(row['crime'], "Ticket") and string.find(row['punishment'], "(UNPAID)") then
@@ -48,11 +49,10 @@ addEventHandler("fetchTickets", getRootElement(), function()
 end)
 
 local function isTicketOfficer(player)
-	return isElement(player) and getElementType(player) == "player"
-		and tonumber(getElementData(player, "loggedin")) == 1
-		and (exports.factions:isPlayerInFaction(player, 1)
-			or exports.factions:isPlayerInFaction(player, 2)
-			or exports.factions:isPlayerInFaction(player, 50))
+	if not isElement(player) or getElementType(player) ~= "player"
+		or tonumber(getElementData(player, "loggedin")) ~= 1 then return false end
+	local dutyFaction = tonumber(exports.factions:getCurrentFactionDuty(player))
+	return dutyFaction == 1 or dutyFaction == 2 or dutyFaction == 50
 end
 
 local function validateFine(value)
@@ -111,7 +111,7 @@ addEventHandler("giveVehicleTicket", getRootElement(), function(vehicle, info, f
 	local officerPlayer = client
 	fine = validateFine(fine)
 	if not isTicketOfficer(officerPlayer) or not isElement(vehicle) or getElementType(vehicle) ~= "vehicle"
-		or not fine or type(offences) ~= "string" or #offences > 100 then
+		or not fine or type(offences) ~= "string" or #offences < 1 or #offences > 100 then
 		return false
 	end
 	local owner = tonumber(getElementData(vehicle, "owner"))
@@ -143,7 +143,7 @@ addEventHandler("giveVehicleTicket", getRootElement(), function(vehicle, info, f
 		return false
 	end
 
-	local plate = type(info) == "string" and info:sub(1, 16) or tostring(getElementData(vehicle, "plate") or "")
+	local plate = tostring(getElementData(vehicle, "plate") or ""):sub(1, 16)
 	triggerEvent("sendAme", officerPlayer, "rips off a ticket from their ticket book and sticks it to the windshield of the " .. tostring(getElementData(vehicle, "year")) .. " " .. tostring(getElementData(vehicle, "brand")) .. " " .. tostring(getElementData(vehicle, "maximemodel")) .. ".")
 	outputChatBox("You have issued a $" .. exports.global:formatMoney(fine) .. " ticket to the vehicle with plate " .. plate .. ".", officerPlayer, 0, 255, 0)
 	return true
@@ -167,20 +167,12 @@ addEventHandler("chargePlayer", getRootElement(), function(amount, method, crime
 	local query = dbQuery(exports.mysql:getConn('mta'),
 		"SELECT `punishment`, `timestamp` FROM `mdc_crimes` WHERE `id` = ? AND `character` = ? LIMIT 1",
 		crimeID, characterID)
+	if not query then processingTickets[lockKey] = nil; return false end
 	local rows = dbPoll(query, 10000)
 	local row = rows and rows[1]
 	local punishment = row and row.punishment
 	local fine = type(punishment) == "string" and tonumber(punishment:match("Fine:%s*%$(%d+)%s*%(UNPAID%)"))
 	if not fine or fine < 50 or fine > 10000 then
-		processingTickets[lockKey] = nil
-		return false
-	end
-
-	local paidText = "Fine: $" .. fine
-	local updated = dbExec(exports.mysql:getConn('mta'),
-		"UPDATE `mdc_crimes` SET `punishment` = ? WHERE `id` = ? AND `character` = ? AND `punishment` = ?",
-		paidText, crimeID, characterID, punishment)
-	if not updated then
 		processingTickets[lockKey] = nil
 		return false
 	end
@@ -195,6 +187,15 @@ addEventHandler("chargePlayer", getRootElement(), function(amount, method, crime
 	if tax < 0 or tax > 1 then tax = 0 end
 	local lawShare = math.floor((1 - tax) * fine)
 	local medicalShare = fine - lawShare
+
+	local paidText = "Fine: $" .. fine
+	local updated = dbExec(exports.mysql:getConn('mta'),
+		"UPDATE `mdc_crimes` SET `punishment` = ? WHERE `id` = ? AND `character` = ? AND `punishment` = ?",
+		paidText, crimeID, characterID, punishment)
+	if not updated then
+		processingTickets[lockKey] = nil
+		return false
+	end
 
 	local paid = false
 	if method == 1 then
