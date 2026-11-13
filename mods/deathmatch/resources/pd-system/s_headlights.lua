@@ -33,8 +33,10 @@ local function getFactionType(vehicle)
 	local vehicleFactionElement = exports.pool:getElement("team", vehicleFactionID)
 	if vehicleFactionElement then
 		local type = getElementData(vehicleFactionElement, "type")
-		if tonumber(type) then
-			return getElementData(vehicleFactionElement, "type"), vehicleFactionID
+		local factionType = tonumber(type)
+		local factionID = tonumber(vehicleFactionID)
+		if factionType and factionID then
+			return factionType, factionID
 		end
 	end
 	return 100, 100
