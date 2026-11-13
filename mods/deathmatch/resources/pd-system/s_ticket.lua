@@ -206,7 +206,12 @@ addEventHandler("chargePlayer", getRootElement(), function(amount, method, crime
 		dbExec(exports.mysql:getConn('mta'),
 			"UPDATE `mdc_crimes` SET `punishment` = ? WHERE `id` = ? AND `character` = ? AND `punishment` = ?",
 			punishment, crimeID, characterID, paidText)
-		local refunded = method == 1 and exports.global:giveMoney(player, fine) or exports.bank:giveBankMoney(player, fine)
+		local refunded
+		if method == 1 then
+			refunded = exports.global:giveMoney(player, fine)
+		else
+			refunded = exports.bank:giveBankMoney(player, fine)
+		end
 		if not refunded then
 			outputDebugString("[pd-system] Failed to refund ticket payment for character " .. characterID .. ", ticket " .. crimeID, 1)
 			outputChatBox("Ticket payment rollback failed. Please contact staff immediately.", player, 255, 0, 0)
