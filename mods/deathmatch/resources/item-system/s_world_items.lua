@@ -936,48 +936,134 @@ function pickupItem(object, leftammo)
 	end
 
 	if itemID == 223 or itemID == 103 then
-		SpecialclearItems(object)
+		if not SpecialclearItems(object) then
+			exports.anticheat:setEld(object, "transfering", nil, "all")
+			return false
+		end
 	end
 
 	exports.global:applyAnimation(source, "CARRY", "liftup", 600, false, true, true)
+	local grantedItem, creditedCash = false, false
 	if itemID > 0 then
-		mysql:query_free("DELETE FROM worlditems WHERE id='" .. id .. "'")
-		while #getItems(object) > 0 do -- This one is suspicious / maxime
-			moveItem2(object, source, 1)
-			outputDebugString("Moved something, atleast trying to")
+		if not loadItems(object) then
+			exports.anticheat:setEld(object, "transfering", nil, "all")
+			return false
 		end
-	else
-		if itemID == -100 then
-			mysql:query_free( "DELETE FROM worlditems WHERE id='" .. id .. "'")
-			setPedArmor(source, itemValue)
-		else
-			if leftammo and itemValue > leftammo then
-				itemValue = itemValue - leftammo
-				exports.anticheat:changeProtectedElementDataEx(object, "itemValue", itemValue)
-				mysql:query_free("UPDATE worlditems SET itemvalue=" .. itemValue .. " WHERE id=" .. id)
-				itemValue = leftammo
-			else
-				mysql:query_free("DELETE FROM worlditems WHERE id='" .. id .. "'")
+		local contents = getItems(object)
+		if type(contents) ~= "table" then
+			exports.anticheat:setEld(object, "transfering", nil, "all")
+			return false
+		end
+		while #contents > 0 do
+			local moved, moveError = exports["item-system"]:moveItem(object, source, 1)
+			if not moved then
+				outputChatBox("Some contents could not be transferred. The world container remains available.", source, 255, 0, 0)
+				outputDebugString("[item-system] World-container transfer stopped: " .. tostring(moveError), 2)
+				exports.anticheat:setEld(object, "transfering", nil, "all")
+				triggerClientEvent(source, "finishItemMove", source)
+				return false
 			end
-			exports.global:giveWeapon(source, -itemID, itemValue, true)
+			if not loadItems(object) then
+				exports.anticheat:setEld(object, "transfering", nil, "all")
+				return false
+			end
+			contents = getItems(object)
+			if type(contents) ~= "table" then
+				exports.anticheat:setEld(object, "transfering", nil, "all")
+				return false
+			end
+		end
+
+		if itemID == 134 then
+			local amount = tonumber(itemValue)
+			if not amount or amount <= 0 or amount ~= amount or amount == math.huge or amount ~= math.floor(amount)
+				or not exports.global:giveMoney(source, amount) then
+				exports.anticheat:setEld(object, "transfering", nil, "all")
+				return false
+			end
+			creditedCash = true
+		else
+			if not giveItem(source, itemID, itemValue, false, false, metadata) then
+				outputChatBox("Your inventory cannot receive this item. The world item remains available.", source, 255, 0, 0)
+				exports.anticheat:setEld(object, "transfering", nil, "all")
+				return false
+			end
+			grantedItem = true
+		end
+
+		if not mysql:query_free("DELETE FROM worlditems WHERE id = " .. id .. " LIMIT 1") then
+			if creditedCash then
+				if not exports.global:takeMoney(source, tonumber(itemValue)) then
+					outputDebugString("[item-system] Failed to reverse cash credit after world-item delete failure #" .. id, 1)
+				end
+			elseif grantedItem then
+				if not takeItem(source, itemID, itemValue) then
+					outputDebugString("[item-system] Failed to reverse inventory grant after world-item delete failure #" .. id, 1)
+				end
+			end
+			exports.anticheat:setEld(object, "transfering", nil, "all")
+			return false
+		end
+	elseif itemID == -100 then
+		local armorAmount = tonumber(itemValue)
+		if not armorAmount or armorAmount <= 0 or armorAmount ~= armorAmount or armorAmount == math.huge then
+			exports.anticheat:setEld(object, "transfering", nil, "all")
+			return false
+		end
+		local oldArmor = getPedArmor(source)
+		if not mysql:query_free("DELETE FROM worlditems WHERE id = " .. id .. " LIMIT 1") then
+			exports.anticheat:setEld(object, "transfering", nil, "all")
+			return false
+		end
+		setPedArmor(source, math.min(100, math.max(oldArmor, armorAmount)))
+	else
+		local weaponID = -itemID
+		local ammoAmount = tonumber(itemValue)
+		local leftAmount = tonumber(leftammo)
+		if weaponID < 1 or weaponID > 46 or not getWeaponNameFromID(weaponID)
+			or not ammoAmount or ammoAmount < 1 or ammoAmount ~= math.floor(ammoAmount) then
+			exports.anticheat:setEld(object, "transfering", nil, "all")
+			return false
+		end
+		local giveAmount = ammoAmount
+		local remainingAmount = 0
+		if leftAmount and leftAmount > 0 and leftAmount < ammoAmount then
+			giveAmount = leftAmount
+			remainingAmount = ammoAmount - leftAmount
+		end
+		if not giveWeapon(source, weaponID, giveAmount, true) then
+			exports.anticheat:setEld(object, "transfering", nil, "all")
+			return false
+		end
+		local querySucceeded
+		if remainingAmount > 0 then
+			querySucceeded = mysql:query_free("UPDATE worlditems SET itemvalue = " .. remainingAmount .. " WHERE id = " .. id)
+			if querySucceeded then
+				exports.anticheat:changeProtectedElementDataEx(object, "itemValue", remainingAmount, false)
+			end
+		else
+			querySucceeded = mysql:query_free("DELETE FROM worlditems WHERE id = " .. id .. " LIMIT 1")
+		end
+		if not querySucceeded then
+			if not takeWeapon(source, weaponID) then
+				outputDebugString("[item-system] Failed to reverse weapon grant after world-item update failure #" .. id, 1)
+			end
+			exports.anticheat:setEld(object, "transfering", nil, "all")
+			return false
 		end
 	end
 
-	exports.logs:dbLog(source, 39, {object}, "~World #" ..getElementID(object) .. " @ ("..ox..", "..oy..", "..oz..") in (int "..getElementInterior( object )..", dim "..getElementDimension( object )..") ->" .. getPlayerName(source) .. " - " ..getItemName(itemID).. " - " ..itemValue)
+	exports.logs:dbLog(source, 39, {object}, "~World #" .. getElementID(object) .. " @ (" .. ox .. ", " .. oy .. ", " .. oz .. ") in (int " .. getElementInterior(object) .. ", dim " .. getElementDimension(object) .. ") -> " .. getPlayerName(source) .. " - " .. getItemName(itemID) .. " - " .. tostring(itemValue))
 	destroyElement(object)
 
-	if itemID == 134 then -- money
-		exports.global:giveMoney(source, itemValue)
+	if itemID == 134 then
 		outputChatBox("You picked up $" .. exports.global:formatMoney(itemValue) .. ".", source, 255, 194, 14)
-		triggerEvent('sendAme', source, "bends over and picks up $" .. exports.global:formatMoney(itemValue) .. ".")
-	elseif itemID == 178 then
-		local yup = split(itemValue, ":")
-		giveItem(source, itemID, itemValue)
-		triggerEvent('sendAme', source, "bends over and picks up " .. getItemDescription( itemID, itemValue ) .. ".")
+		triggerEvent("sendAme", source, "bends over and picks up $" .. exports.global:formatMoney(itemValue) .. ".")
+	elseif itemID == -100 then
+		outputChatBox("You picked up body armor.", source, 255, 194, 14)
 	else
-		giveItem(source, itemID, itemValue, nil, nil, metadata)
-		outputChatBox("You picked up a " .. getItemName( itemID, itemValue, metadata ) .. ".", source, 255, 194, 14)
-		triggerEvent('sendAme', source, "bends over and picks up a " .. getItemName( itemID, itemValue, metadata ) .. ".")
+		outputChatBox("You picked up a " .. getItemName(itemID, itemValue, metadata) .. ".", source, 255, 194, 14)
+		triggerEvent("sendAme", source, "bends over and picks up a " .. getItemName(itemID, itemValue, metadata) .. ".")
 	end
 	doItemGivenChecks(source, itemID, itemValue)
 	triggerClientEvent(source, "item:updateclient", source)
