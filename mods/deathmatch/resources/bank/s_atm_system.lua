@@ -605,106 +605,58 @@ function depositATMMoneyPersonal(amount, theATM)
 	local player = client
 	amount = validateATMAmount(amount)
 	if not player or not amount or not validateATMInteraction(player, theATM) then return false end
-	local state = tonumber(getElementData(client, "loggedin")) or 0
-	if (state == 0) then
-		return false
-	end
 
 	local foundAnATMCard = getATMCardFromATMMachine(theATM)
-	if not foundAnATMCard then
-		exports.hud:sendBottomNotification(client,"ATM Machine is not working properly!", "This is really weird, the card you've just inserted, It's gone magically!")
+	if type(foundAnATMCard) ~= "table" or tonumber(foundAnATMCard[1]) ~= 150 then
+		triggerClientEvent(player, "bank:respondToPendingTransfer", player, "ATM Machine is not working properly. Please reinsert your card.")
 		return false
 	end
-
 	local cardOwner, cardNumber, cardOwnerCharID = getCardInfo(foundAnATMCard)
-	local checkingResult = areYouAltAlting(client, { cardOwner, cardNumber, cardOwnerCharID} )
-	if checkingResult == "between alts" then
-		exports.global:sendMessageToAdmins("[BANK] ("..getElementData(client, "playerid")..") "..tostring(getPlayerName(client)):gsub("_"," ").." - "..getElementData(client, "account:username").." attempted to deposit $"..exports.global:formatMoney(amount).." to another ATM card owned by his alt.")
-		triggerClientEvent( client, "bank:respondToPendingTransfer", client, "You can not transfer money between your own characters. Using other ATM card to gain this purpose may get yourself a permanent ban.")
+	local owner = fetchATMCardOwner(cardNumber)
+	if not owner or tonumber(cardOwnerCharID) ~= owner.id then
+		triggerClientEvent(player, "bank:respondToPendingTransfer", player, "The ATM card is invalid or disabled. Please contact the bank.")
+		return false
+	end
+
+	local altCheck = areYouAltAlting(player, { cardOwner, cardNumber, owner.id })
+	if altCheck then
+		exports.global:sendMessageToAdmins("[BANK] " .. getPlayerName(player) .. " attempted an ATM deposit to an alternate character's card (" .. tostring(altCheck) .. ").")
+		triggerClientEvent(player, "bank:respondToPendingTransfer", player, "You cannot transfer money between your own characters.")
 		disableATMCard(cardNumber)
 		exports["item-system"]:clearItems(theATM)
 		return false
 	end
 
-	if checkingResult == "between chars over the same ip" then
-		exports.global:sendMessageToAdmins("[BANK] ("..getElementData(client, "playerid")..") "..tostring(getPlayerName(client)):gsub("_"," ").." - "..getElementData(client, "account:username").." attempted to deposit $"..exports.global:formatMoney(amount).." to another ATM card owned by a character in his other account on the same IP address.")
-		triggerClientEvent( client, "bank:respondToPendingTransfer", client, "You can not transfer money between your own characters. Using other ATM card to gain this purpose may get yourself a permanent ban.")
-		disableATMCard(cardNumber)
-		exports["item-system"]:clearItems(theATM)
+	local ownerElement = exports.pool:getElement("playerByDbid", owner.id)
+	if isElement(ownerElement) and tonumber(getElementData(ownerElement, "bankmoney")) ~= owner.balance then
+		triggerClientEvent(player, "bank:respondToPendingTransfer", player, "The account balance changed. Please try again.")
+		return false
+	end
+	if owner.balance + amount > 2000000000 then
+		triggerClientEvent(player, "bank:respondToPendingTransfer", player, "The recipient's bank account cannot accept that amount.")
 		return false
 	end
 
-	if checkingResult == "between chars over the same mtaserial" then
-		exports.global:sendMessageToAdmins("[BANK] ("..getElementData(client, "playerid")..") "..tostring(getPlayerName(client)):gsub("_"," ").." - "..getElementData(client, "account:username").." attempted  deposit $"..exports.global:formatMoney(amount).." to another ATM card owned by a character in his other account on the same MTA Serial.")
-		triggerClientEvent( client, "bank:respondToPendingTransfer", client, "You can not transfer money between your own characters. Using other ATM card to gain this purpose may get yourself a permanent ban.")
-		disableATMCard(cardNumber)
-		exports["item-system"]:clearItems(theATM)
+	if not exports.global:takeMoney(player, amount, nil, true) then
+		triggerClientEvent(player, "bank:respondToPendingTransfer", player, "You do not have enough available cash.")
 		return false
 	end
 
-
-	if not exports.global:hasMoney(client, amount) then
-		exports.hud:sendBottomNotification(client,"ATM Machine", "You don't have that amount in one sorted money item.")
-		return false
-	end
-
-	--[[
-	if areYouAltAlting(client, cardOwner) then
-		exports.global:sendMessageToAdmins("[BANK] ("..getElementData(client, "playerid")..") "..tostring(getPlayerName(client)):gsub("_"," ").." - "..getElementData(client, "account:username").." attempted to transfer $"..exports.global:formatMoney(amount).." to another ATM card owned by his alt.")
-		triggerClientEvent( client, "bank:respondToPendingTransfer", client, "You can not transfer money between your own characters. Using other ATM card to gain this purpose may get yourself a permanent ban.")
-		disableATMCard(cardNumber)
-		exports["item-system"]:clearItems(theATM)
-		return false
-	end
-	]]
-	local balanceCheck = mysql:query_fetch_assoc("SELECT `bankmoney`, `id` FROM `characters` LEFT JOIN `atm_cards` ON `characters`.`id`=`atm_cards`.`card_owner` WHERE `card_number`='"..cardNumber.."' AND `card_locked`='0' AND `card_type`='1' ")
-	local balance = nil
-	if not balanceCheck or not balanceCheck["bankmoney"] then
-		balance = 0
-	else
-		balance = tonumber(balanceCheck["bankmoney"])
-	end
-
-	local charID = balanceCheck["id"]
-	local cardOwnerElement = exports.pool:getElement("playerByDbid", tonumber(charID))
-
-	local moneyTransferred = false
-
-	if cardOwnerElement then
-		if getElementData(cardOwnerElement, "bankmoney") ~= balance then --This is to fasten the security and to slow down player. / Maxime
-			triggerClientEvent( client, "bank:respondToPendingTransfer", client, "Could not complete the transaction. Please contact the bank or try again later.")
-			return false
+	if not adjustATMCardOwnerBalance(player, owner.id, isElement(ownerElement) and ownerElement or nil, amount, "plus") then
+		if not exports.global:giveMoney(player, amount, true) then
+			outputDebugString("[BANK] Failed to refund cash after ATM deposit credit failure for card " .. cardNumber, 1)
+			outputChatBox("ATM deposit failed and your cash refund could not be completed. Contact staff immediately.", player, 255, 0, 0)
 		end
-		if exports.global:takeMoney(client, amount) then
-			giveBankMoney(cardOwnerElement, amount)
-			moneyTransferred = true
-		else
-			triggerClientEvent( client, "bank:respondToPendingTransfer", client, "Could not complete the transaction. Please contact the bank or try again later.")
-			return false
-		end
-		outputDebugString("[BANK] "..getPlayerName(client).." deposit $"..amount.." to "..cardNumber.."/"..cardOwner.."(Online)")
-	else
-		money = balance + amount
-		if exports.global:takeMoney(client, amount) then
-			updateBankMoney(client, charID, amount, "plus")
-			moneyTransferred = true
-		else
-			triggerClientEvent( client, "bank:respondToPendingTransfer", client, "Could not complete the transaction. Please contact the bank or try again later.")
-			return false
-		end
-		outputDebugString("[BANK] "..getPlayerName(client).." deposited $"..amount.." to "..cardNumber.."/"..cardOwner.."(Offline)")
+		triggerClientEvent(player, "bank:respondToPendingTransfer", player, "The bank account could not be credited. Your cash was returned.")
+		return false
 	end
 
-	if moneyTransferred then
-		exports.hud:sendBottomNotification(client, "ATM Machine", "You deposited $" .. exports.global:formatMoney(amount) .. " to ATM Card '"..cardNumber.."' (Owner: '"..no_(cardOwner).."') ")
-		triggerEvent("bank:ejectATMCard", client, theATM)
-
-		local atmName = getATMName(theATM)
-		addBankTransactionLog(nil, cardOwnerCharID, amount, 1, nil, "Deposited from "..atmName, nil, cardNumber)
-		exports.logs:dbLog(client, 25, client, "DEPOSITED $" .. amount.." - REMAINING $"..money.." TO ("..cardOwner..", "..cardNumber..", "..atmName..")")
-		return true
-	end
-
+	local atmName = getATMName(theATM)
+	addBankTransactionLog(nil, owner.id, amount, 1, nil, "Deposited from " .. atmName, nil, cardNumber)
+	exports.logs:dbLog(player, 25, player, "DEPOSITED $" .. amount .. " - NEW BALANCE $" .. (owner.balance + amount) .. " TO (" .. owner.name .. ", " .. cardNumber .. ", " .. atmName .. ")")
+	exports.hud:sendBottomNotification(player, "ATM Machine", "You deposited $" .. exports.global:formatMoney(amount) .. " to ATM Card '" .. cardNumber .. "' (Owner: '" .. no_(owner.name) .. "').")
+	triggerEvent("bank:ejectATMCard", player, theATM)
+	return true
 end
 addEvent("bank:depositATMMoneyPersonal", true)
 addEventHandler("bank:depositATMMoneyPersonal", getRootElement(), depositATMMoneyPersonal)
