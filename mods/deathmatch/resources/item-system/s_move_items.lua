@@ -313,13 +313,22 @@ local function moveToElement(element, slot, ammo, event)
 									triggerEvent('sendAme', source, "puts $" .. exports.global:formatMoney(amount) .. " inside the " .. name .. ".")
 								end
 							else
+							local recipientReversed
 							if getElementType(element) == "player" then
-								exports.global:takeMoney(element, amount)
+								recipientReversed = exports.global:takeMoney(element, amount)
 							else
-								exports.global:takeItem(element, 134, amount)
+								recipientReversed = exports.global:takeItem(element, 134, amount)
 							end
-							exports.global:giveMoney(source, amount)
-							outputChatBox("Cash transfer failed and was rolled back.", source, 255, 0, 0)
+							if recipientReversed then
+								if exports.global:giveMoney(source, amount) then
+									outputChatBox("Cash transfer failed and was rolled back.", source, 255, 0, 0)
+								else
+									outputChatBox("Cash rollback failed. Please contact staff.", source, 255, 0, 0)
+								end
+							else
+								outputDebugString("[item-system] Cash transfer rollback failed; recipient retains transferred cash.", 1)
+								outputChatBox("Cash transfer could not be rolled back. Please contact staff.", source, 255, 0, 0)
+							end
 						end
 					else
 						exports.global:giveMoney(source, amount)
@@ -467,7 +476,8 @@ local function moveWorldItemToElement( item, element )
 		return false
 	end
 	local itemID = tonumber(getElementData(item, "itemID"))
-	local itemValue = getElementData( item, "itemValue" ) or 1
+	if not itemID or itemID < 1 or itemID ~= math.floor(itemID) then return false end
+	local itemValue = getElementData(item, "itemValue") or 1
 	local metadata = getElementData( item, "metadata" )
 	local name = getName(element)
 
