@@ -832,10 +832,25 @@ function takePlayerItem(thePlayer, commandName, targetPlayer, itemID, ...)
         else
             local targetPlayer, targetPlayerName = exports.global:findPlayerByPartialNick(thePlayer, targetPlayer)
             if targetPlayer then
-                local logged = getElementData(targetPlayer, "loggedin")
+                local logged = tonumber(getElementData(targetPlayer, "loggedin"))
                 local itemValue = table.concat({...}, " ")
                 itemID = tonumber(itemID)
-                itemValue = tonumber(itemValue) or itemValue
+                if not itemID or itemID < 1 or itemID ~= math.floor(itemID) then
+                    outputChatBox("Invalid item ID.", thePlayer, 255, 0, 0)
+                    return false
+                end
+                local targetItems = exports["item-system"]:getItems(targetPlayer)
+                if type(targetItems) ~= "table" then
+                    outputChatBox("The target inventory could not be loaded.", thePlayer, 255, 0, 0)
+                    return false
+                end
+                local itemMetadata
+                for _, inventoryItem in ipairs(targetItems) do
+                    if tonumber(inventoryItem[1]) == itemID and tostring(inventoryItem[2]) == itemValue then
+                        itemMetadata = inventoryItem[5]
+                        break
+                    end
+                end
                 local displayItemName = exports['item-system']:getItemName(itemID)
                
  
@@ -858,9 +873,9 @@ function takePlayerItem(thePlayer, commandName, targetPlayer, itemID, ...)
                                 outputChatBox("The item could not be removed from the target's inventory.", thePlayer, 255, 0, 0)
                                 return false
                             end
-                            local given = exports.global:giveItem(thePlayer, itemID, itemValue)
+                            local given = exports.global:giveItem(thePlayer, itemID, itemValue, itemMetadata)
                             if not given then
-                                exports.global:giveItem(targetPlayer, itemID, itemValue)
+                                exports.global:giveItem(targetPlayer, itemID, itemValue, itemMetadata)
                                 outputChatBox("Transfer failed; the item was returned to the target.", thePlayer, 255, 0, 0)
                                 triggerClientEvent(targetPlayer, "item:updateclient", targetPlayer)
                                 return false
