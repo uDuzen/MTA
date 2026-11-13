@@ -1,35 +1,38 @@
-local function canAccessElement( player, element )
+local function canAccessElement(player, element)
 	if not isElement(player) or getElementType(player) ~= "player" or not isElement(element) then
 		return false
 	end
-	if isPedDead ( player ) then
+	if isPedDead(player) then return false end
+
+	local elementType = getElementType(element)
+	local playerDimension = getElementDimension(player)
+	if playerDimension ~= getElementDimension(element) then
+		return elementType == "interior" and tonumber(getElementID(element)) == playerDimension
+	end
+	-- Interior elements represent the current virtual interior, not a physical
+	-- storage location; matching dimensions are sufficient.
+	if elementType == "interior" then return true end
+
+	local px, py, pz = getElementPosition(player)
+	local ex, ey, ez = getElementPosition(element)
+	if getDistanceBetweenPoints3D(px, py, pz, ex, ey, ez) > smallRadius then
 		return false
 	end
 
-	if getElementDimension( player ) ~= getElementDimension( element ) then
-		return getElementType(element) == 'interior' and getElementID(element) == getElementDimension(player)
-	end
-
-	if getElementType( element ) == "vehicle" then
-		if not isVehicleLocked( element ) then
+	if elementType == "vehicle" and isVehicleLocked(element) then
+		local vehicle = getPedOccupiedVehicle(player)
+		local inVehicle = getElementData(player, "realinvehicle")
+		if vehicle == element and inVehicle == 1 then
 			return true
+		elseif vehicle == element and inVehicle == 0 then
+			outputDebugString("canAccessElement failed (hack?): " .. getPlayerName(player) .. " on Vehicle " .. tostring(getElementData(element, "dbid")))
+			return false
 		else
-			local veh = getPedOccupiedVehicle( player )
-			local inVehicle = getElementData( player, "realinvehicle" )
-
-			if veh == element and inVehicle == 1 then
-				return true
-			elseif veh == element and inVehicle == 0 then
-				outputDebugString( "canAcccessElement failed (hack?): " .. getPlayerName( player ) .. " on Vehicle " .. getElementData( element, "dbid" ) )
-				return false
-			else
-				outputDebugString( "canAcccessElement failed (locked): " .. getPlayerName( player ) .. " on Vehicle " .. getElementData( element, "dbid" ) )
-				return false
-			end
+			outputDebugString("canAccessElement failed (locked): " .. getPlayerName(player) .. " on Vehicle " .. tostring(getElementData(element, "dbid")))
+			return false
 		end
-	else
-		return true
 	end
+	return true
 end
 
 --
