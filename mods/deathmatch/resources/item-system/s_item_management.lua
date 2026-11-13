@@ -431,6 +431,10 @@ function takeItemFromSlot(element, slot, nosqlupdate, no_update_guns)
 				end
 				local result = mysql:query_free("DELETE FROM items WHERE `index` = " .. index
 					.. " AND type = " .. elementType .. " AND owner = " .. elementID .. " LIMIT 1")
+				if result then
+					local remainingRow = mysql:query_fetch_assoc("SELECT `index` FROM items WHERE `index` = " .. index .. " LIMIT 1")
+					if remainingRow then result = false end
+				end
 				--[[if itemID == 178 then
 					local query = mysql:query_free( "DELETE FROM books WHERE id = " .. index .. " LIMIT 1")
 				end]]
@@ -467,10 +471,26 @@ function updateItemValue(element, slot, itemValue)
 	if success then
 		if saveditems[element][slot] then
 			if itemValue then
-				local itemIndex = saveditems[element][slot][3]
-				local updated = dbExec(exports.mysql:getConn('mta'), "UPDATE items SET itemValue=? WHERE `index`=? ", itemValue, itemIndex)
-				if not updated then
-					return false, "Item value could not be saved"
+				local itemIndex = tonumber(saveditems[element][slot][3])
+				local elementType, elementID = getType(element), tonumber(getID(element))
+				if not itemIndex or itemIndex < 1 or itemType == 255 or not elementID or elementID < 0 then
+					return false, "Invalid inventory owner or item index"
+				end
+				if client and (client ~= element or getElementType(client) ~= "player"
+					or tonumber(getElementData(client, "loggedin")) ~= 1) then
+					return false, "Invalid client inventory update"
+				end
+				local ownerRow = mysql:query_fetch_assoc("SELECT `index` FROM items WHERE `index` = "
+					.. itemIndex .. " AND type = " .. elementType .. " AND owner = " .. elementID .. " LIMIT 1")
+				if not ownerRow then return false, "Item is no longer owned by this inventory" end
+				local updated = dbExec(exports.mysql:getConn("mta"),
+					"UPDATE items SET itemValue=? WHERE `index`=? AND type=? AND owner=?",
+					itemValue, itemIndex, elementType, elementID)
+				if not updated then return false, "Item value could not be saved" end
+				local savedRow = mysql:query_fetch_assoc("SELECT itemValue FROM items WHERE `index` = "
+					.. itemIndex .. " AND type = " .. elementType .. " AND owner = " .. elementID .. " LIMIT 1")
+				if not savedRow or tostring(savedRow.itemValue) ~= tostring(itemValue) then
+					return false, "Item value update could not be verified"
 				end
 				saveditems[element][slot][2] = itemValue
 				notify(element)
@@ -555,18 +575,33 @@ function updateMetadata(element, slot, key, value)
 				metadata = nil
 			end
 
-			local itemIndex = item[3]
+			local itemIndex = tonumber(item[3])
+			local elementType, elementID = getType(element), tonumber(getID(element))
+			if not itemIndex or itemIndex < 1 or itemIndex ~= math.floor(itemIndex)
+				or elementType == 255 or not elementID or elementID < 0 then
+				return false, "invalid inventory owner or item index"
+			end
+			local ownerRow = mysql:query_fetch_assoc("SELECT `index` FROM items WHERE `index` = "
+				.. itemIndex .. " AND type = " .. elementType .. " AND owner = " .. elementID .. " LIMIT 1")
+			if not ownerRow then return false, "item is no longer owned by this inventory" end
 			local updated
 			if metadata == nil then
-				updated = dbExec( exports.mysql:getConn('mta'), "UPDATE items SET metadata=NULL WHERE `index`=? ", itemIndex )
+				updated = dbExec(exports.mysql:getConn("mta"),
+					"UPDATE items SET metadata=NULL WHERE `index`=? AND type=? AND owner=?",
+					itemIndex, elementType, elementID)
 			else
 				local encodedMetadata = toJSON(metadata)
 				if not encodedMetadata or #encodedMetadata > 8192 then
 					return false, "metadata is invalid or too large"
 				end
-				updated = dbExec( exports.mysql:getConn('mta'), "UPDATE items SET metadata=? WHERE `index`=? ", encodedMetadata, itemIndex )
+				updated = dbExec(exports.mysql:getConn("mta"),
+					"UPDATE items SET metadata=? WHERE `index`=? AND type=? AND owner=?",
+					encodedMetadata, itemIndex, elementType, elementID)
 			end
 			if not updated then return false, "metadata could not be saved" end
+			local savedRow = mysql:query_fetch_assoc("SELECT `index` FROM items WHERE `index` = "
+				.. itemIndex .. " AND type = " .. elementType .. " AND owner = " .. elementID .. " LIMIT 1")
+			if not savedRow then return false, "metadata update could not be verified" end
 			saveditems[element][slot][5] = metadata
 			notify( element )
 			return true
