@@ -527,15 +527,27 @@ function updateTable(newTable, changesTable)
 		end
 	end
 
+	local existingDutyRows = {}
+	for existingFactionID, factionData in pairs(dutyAllow) do
+		for _, item in ipairs(factionData[3] or {}) do
+			local existingID = tonumber(item[1])
+			if existingID then existingDutyRows[existingID] = tonumber(existingFactionID) end
+		end
+	end
+	local maxDutyRowID = tonumber(getElementData(resourceRoot, "maxIndex")) or 0
+	local changedRowIDs = {}
 	for _, change in ipairs(changesTable) do
 		if type(change) ~= "table" then return false end
 		local factionID = tonumber(change[1])
 		local action = tonumber(change[2])
 		local rowID = tonumber(change[3])
 		if not factionID or not dutyAllow[factionID] or (action ~= 0 and action ~= 1)
-			or not rowID or rowID < 1 or rowID ~= math.floor(rowID) then
+			or not rowID or rowID < 1 or rowID ~= math.floor(rowID) or changedRowIDs[rowID] then
 			return false
 		end
+		changedRowIDs[rowID] = true
+		if action == 0 and existingDutyRows[rowID] ~= factionID then return false end
+		if action == 1 and (existingDutyRows[rowID] ~= nil or rowID <= maxDutyRowID) then return false end
 		if action == 1 then
 			local itemID = tonumber(change[4])
 			if not itemID or itemID == 0
