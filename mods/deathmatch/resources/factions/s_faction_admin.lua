@@ -13,7 +13,7 @@ dutyAllowChanges = { }
 function adminSetPlayerFaction(thePlayer, commandName, partialNick, factionID)
 	if exports.integration:isPlayerTrialAdmin(thePlayer) or exports.integration:isPlayerFMTLeader(thePlayer) then
 		factionID = tonumber(factionID)
-		if not partialNick or not factionID or (factionID ~= -1 and (factionID < 1 or factionID ~= math.floor(factionID))) then
+		if not partialNick or not factionID or (factionID < 1 or factionID ~= math.floor(factionID)) then
 			outputChatBox("SYNTAX: /" .. commandName .. " [Player Partial Name/ID] [Faction ID]", thePlayer, 255, 194, 14)
 		else
 			local targetPlayer, targetPlayerNick = exports.global:findPlayerByPartialNick(thePlayer, partialNick)
@@ -65,7 +65,7 @@ addCommandHandler("setfaction", adminSetPlayerFaction, false, false)
 function adminRemovePlayerFaction(thePlayer, commandName, partialNick, factionID)
 	if exports.integration:isPlayerTrialAdmin(thePlayer) or exports.integration:isPlayerFMTLeader(thePlayer) then
 		factionID = tonumber(factionID)
-		if not partialNick or not factionID or factionID < 1 or factionID ~= math.floor(factionID) then
+		if not partialNick or not factionID or (factionID ~= -1 and (factionID < 1 or factionID ~= math.floor(factionID))) then
 			outputChatBox("SYNTAX: /" .. commandName .. " [Player Partial Name/ID] [Faction ID]", thePlayer, 255, 194, 14)
 		else
 			local targetPlayer, targetPlayerNick = exports.global:findPlayerByPartialNick(thePlayer, partialNick)
