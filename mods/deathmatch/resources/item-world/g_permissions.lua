@@ -7,9 +7,33 @@ integration = exports.integration
 
 
 function canEditItemProperties(thePlayer, object)
-	if not object then return false end
-	local interiorID = getElementDimension(object)
-	if exports.global:hasItem(localPlayer, 3, interiorID - 20000) or exports.global:hasItem(localPlayer, 4, interiorID) or exports.global:hasItem(localPlayer, 5, interiorID) or (exports.integration:isPlayerTrialAdmin(thePlayer) and exports.global:isAdminOnDuty(thePlayer)) or exports.integration:isPlayerScripter(thePlayer) then
+	if not isElement(thePlayer) or getElementType(thePlayer) ~= "player"
+		or not isElement(object) or getElementType(object) ~= "object" then
+		return false
+	end
+
+	local playerID = tonumber(getElementData(thePlayer, "dbid"))
+	local creatorID = tonumber(getElementData(object, "creator"))
+	if playerID and creatorID and playerID == creatorID then
+		return true
+	end
+
+	local dimension = tonumber(getElementDimension(object)) or 0
+	local hasPropertyKey = false
+	if dimension > 20000 then
+		hasPropertyKey = exports.global:hasItem(thePlayer, 3, dimension - 20000)
+	elseif dimension > 0 then
+		hasPropertyKey = exports.global:hasItem(thePlayer, 4, dimension)
+			or exports.global:hasItem(thePlayer, 5, dimension)
+	end
+	if hasPropertyKey then return true end
+
+	if exports.integration:isPlayerTrialAdmin(thePlayer)
+		and exports.global:isAdminOnDuty(thePlayer) then
+		return true
+	end
+	if exports.integration:isPlayerScripter(thePlayer)
+		and exports.global:isStaffOnDuty(thePlayer) then
 		return true
 	end
 	return false
