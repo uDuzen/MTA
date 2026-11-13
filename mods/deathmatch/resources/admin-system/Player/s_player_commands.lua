@@ -481,9 +481,9 @@ function givePlayerGun(thePlayer, commandName, targetPlayer, ...)
 					return
 				end
 
-				if not exports.weapon:getAmmoPerClip(weaponID) then
-						outputChatBox("[MAKEGUN] Invalid Weapon Name/ID. Type /gunlist for an overview of all available weapons.", thePlayer, 255, 0, 0)
-						return
+				if not weaponID or weaponID < 1 or weaponID > 46 or weaponID ~= math.floor(weaponID) or not exports.weapon:getAmmoPerClip(weaponID) then
+					outputChatBox("[MAKEGUN] Invalid Weapon Name/ID. Type /gunlist for an overview of all available weapons.", thePlayer, 255, 0, 0)
+					return
 				end
 
 				local logged = getElementData(targetPlayer, "loggedin")
@@ -495,12 +495,18 @@ function givePlayerGun(thePlayer, commandName, targetPlayer, ...)
 
 					local adminDBID = tonumber(getElementData(thePlayer, "account:character:id"))
 					local playerDBID = tonumber(getElementData(targetPlayer, "account:character:id"))
-
-					if quantity == nil then
-						quantity = 1
+					if not adminDBID or adminDBID < 1 or not playerDBID or playerDBID < 1 then
+						outputChatBox("[MAKEGUN] A valid character account is required for weapon serial creation.", thePlayer, 255, 0, 0)
+						return false
 					end
 
-					local maxAmountOfWeapons = tonumber(get( getResourceName( getThisResource( ) ).. '.maxAmountOfWeapons' ))
+					quantity = quantity or 1
+					local maxAmountOfWeapons = tonumber(get(getResourceName(getThisResource()) .. ".maxAmountOfWeapons")) or 10
+					maxAmountOfWeapons = math.max(1, math.min(100, math.floor(maxAmountOfWeapons)))
+					if quantity ~= quantity or quantity < 1 or quantity ~= math.floor(quantity) then
+						outputChatBox("[MAKEGUN] Quantity must be a positive whole number.", thePlayer, 255, 0, 0)
+						return false
+					end
 					if quantity > maxAmountOfWeapons then
 						quantity = maxAmountOfWeapons
 						outputChatBox("[MAKEGUN] You can't give more than "..maxAmountOfWeapons.." weapons at a time. Trying to spawn "..maxAmountOfWeapons.."...", thePlayer, 150, 150, 150)
