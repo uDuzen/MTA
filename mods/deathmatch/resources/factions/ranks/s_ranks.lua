@@ -277,7 +277,7 @@ function cacheFactionRankDatabase(qh)
 				FactionRanks[0][column] = true
 				if (value == "true") then value = true end
 				if (value == "false") then value = false end
-				FactionRanks[row.id][column] = value
+				FactionRanks[rankID][column] = value
 					-- Associate Faction Ranks
 				if (column == "faction_id") then
 					value = tonumber(value)
