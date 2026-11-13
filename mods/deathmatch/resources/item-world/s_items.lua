@@ -61,11 +61,13 @@ function setData(element, key, value)
 end
 
 function getData(element, key)
-	if getElementParent(getElementParent(element)) == getResourceRootElement(getThisResource()) then
-		local metadata = getElementData(element, "metadata") or {}
-		return metadata[key]
+	if not isElement(element) or type(key) ~= "string"
+		or getElementParent(getElementParent(element)) ~= getResourceRootElement(getThisResource()) then
+		return nil
 	end
-	return nil
+	local metadata = getElementData(element, "metadata")
+	if type(metadata) ~= "table" then return nil end
+	return metadata[key]
 end
 
 function setPermissions(element, permissions)
@@ -95,15 +97,13 @@ function setPermissions(element, permissions)
 end
 
 function getPermissions(element)
-	if getElementParent(getElementParent(element)) == getResourceRootElement(getThisResource()) then
-		local perm = getElementData(element, "worlditem.permissions")
-		if perm then
-			return perm
-		else
-			return getPermissionsFromDB(element)
-		end
+	if not isElement(element)
+		or getElementParent(getElementParent(element)) ~= getResourceRootElement(getThisResource()) then
+		return false
 	end
-	return false
+	local permissions = getElementData(element, "worlditem.permissions")
+	if type(permissions) == "table" then return permissions end
+	return getPermissionsFromDB(element)
 end
 
 function getPermissionsFromDB(element)
@@ -140,12 +140,20 @@ end
 function deleteOne(dbid, no_sql)
 	local id = tonumber(dbid)
 	if not id or id < 1 or id ~= math.floor(id) then return false end
-	local object = exports.pool:getElement("object", id)
-	if not isElement(object) then return false end
+	local matchingObjects = {}
+	for _, object in ipairs(getElementsByType("object", resourceRoot)) do
+		if tonumber(getElementData(object, "id")) == id then
+			matchingObjects[#matchingObjects + 1] = object
+		end
+	end
 	if not no_sql and not dbExec(exports.mysql:getConn("mta"), "DELETE FROM worlditems WHERE id=? LIMIT 1", id) then
 		return false
 	end
-	return destroyElement(object)
+	local deleted = false
+	for _, object in ipairs(matchingObjects) do
+		if isElement(object) and destroyElement(object) then deleted = true end
+	end
+	return not no_sql or deleted
 end
 
 function deleteAll(id, value, no_sql)
