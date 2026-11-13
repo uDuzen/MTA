@@ -997,13 +997,6 @@ function pickupItem(object, leftammo)
 		return false
 	end
 
-	if itemID == 223 or itemID == 103 then
-		if not SpecialclearItems(object) then
-			exports.anticheat:setEld(object, "transfering", nil, "all")
-			return false
-		end
-	end
-
 	exports.global:applyAnimation(source, "CARRY", "liftup", 600, false, true, true)
 	local grantedItem, creditedCash = false, false
 	if itemID > 0 then
