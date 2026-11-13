@@ -630,7 +630,7 @@ local function moveFromElement(element, slot, ammo, index)
 		outputChatBox("You can not move this item. Contact an admin via F1.", source, 255, 0, 0)
 		return
 	end
-	if item[1] < 0 or item[1] == -100 then
+	if item[1] < 0 and item[1] ~= -100 then
 		ammo = tonumber(ammo)
 		if not ammo or ammo ~= ammo or ammo == math.huge or ammo < 0 or ammo > 10000 or ammo ~= math.floor(ammo) then
 			triggerClientEvent(source, "finishItemMove", source)
