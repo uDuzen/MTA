@@ -95,6 +95,23 @@ local function setMoneyElementData(element, balance)
 	return setElementData(element, "money", balance, true)
 end
 
+local function fetchStoredBalance(tableName, id, columnName)
+	local row = mysql:query_fetch_assoc("SELECT " .. columnName .. " AS balance FROM " .. tableName .. " WHERE id = " .. id .. " LIMIT 1")
+	local balance = row and tonumber(row.balance)
+	if not balance or balance ~= balance or balance == math.huge or balance == -math.huge then return nil end
+	return balance
+end
+
+local function rollbackStoredBalance(tableName, id, columnName, expectedCurrent, previousBalance)
+	local rolledBack = mysql:query_free("UPDATE " .. tableName .. " SET " .. columnName .. " = " .. previousBalance
+		.. " WHERE id = " .. id .. " AND " .. columnName .. " = " .. expectedCurrent)
+	if not rolledBack then
+		outputDebugString("[global] Failed to roll back " .. tableName .. "." .. columnName .. " for ID " .. id, 1)
+		return false
+	end
+	return true
+end
+
 function giveMoney(thePlayer, amount, fromBank)
 	amount = tonumber(amount)
 	if not amount or amount ~= amount or amount == math.huge or amount == -math.huge or amount < 0 then return false end
@@ -103,21 +120,29 @@ function giveMoney(thePlayer, amount, fromBank)
 	if not isElement(thePlayer) then return false end
 
 	local elementType = getElementType(thePlayer)
-	local currentMoney = tonumber(getMoney(thePlayer, true)) or 0
-	local newBalance = currentMoney + amount
-	if newBalance > 2000000000 then return false end
-
 	if elementType == "player" then
 		local characterID = tonumber(getElementData(thePlayer, "dbid"))
 		if not characterID or characterID < 1 then return false end
+		local currentMoney = fetchStoredBalance("characters", characterID, "money")
+		if not currentMoney then return false end
+		local newBalance = currentMoney + amount
+		if newBalance > 2000000000 then return false end
+
 		local removed, oldItems = removeMoneyItems(thePlayer)
 		if not removed then return false end
-		if not mysql:query_free("UPDATE characters SET money = money + " .. amount .. " WHERE id = " .. characterID) then
+		if not mysql:query_free("UPDATE characters SET money = money + " .. amount
+			.. " WHERE id = " .. characterID .. " AND money = " .. currentMoney) then
 			restoreMoneyItems(thePlayer, oldItems)
 			return false
 		end
+		local savedBalance = fetchStoredBalance("characters", characterID, "money")
+		if savedBalance ~= newBalance then
+			restoreMoneyItems(thePlayer, oldItems)
+			outputDebugString("[global] Character balance update could not be verified for ID " .. characterID, 1)
+			return false
+		end
 		if not setMoneyElementData(thePlayer, newBalance) then
-			mysql:query_free("UPDATE characters SET money = money - " .. amount .. " WHERE id = " .. characterID)
+			rollbackStoredBalance("characters", characterID, "money", newBalance, currentMoney)
 			restoreMoneyItems(thePlayer, oldItems)
 			return false
 		end
@@ -129,9 +154,18 @@ function giveMoney(thePlayer, amount, fromBank)
 	elseif elementType == "team" then
 		local factionID = tonumber(getElementData(thePlayer, "id"))
 		if not factionID or factionID < 1 then return false end
-		if not mysql:query_free("UPDATE factions SET bankbalance = bankbalance + " .. amount .. " WHERE id = " .. factionID) then return false end
+		local currentMoney = fetchStoredBalance("factions", factionID, "bankbalance")
+		if not currentMoney then return false end
+		local newBalance = currentMoney + amount
+		if newBalance > 2000000000 then return false end
+		if not mysql:query_free("UPDATE factions SET bankbalance = bankbalance + " .. amount
+			.. " WHERE id = " .. factionID .. " AND bankbalance = " .. currentMoney) then return false end
+		if fetchStoredBalance("factions", factionID, "bankbalance") ~= newBalance then
+			outputDebugString("[global] Faction balance update could not be verified for ID " .. factionID, 1)
+			return false
+		end
 		if not setMoneyElementData(thePlayer, newBalance) then
-			mysql:query_free("UPDATE factions SET bankbalance = bankbalance - " .. amount .. " WHERE id = " .. factionID)
+			rollbackStoredBalance("factions", factionID, "bankbalance", newBalance, currentMoney)
 			return false
 		end
 		return true
@@ -147,23 +181,31 @@ function takeMoney(thePlayer, amount, rest, toBank)
 	if not isElement(thePlayer) then return false, 0 end
 
 	local elementType = getElementType(thePlayer)
-	local currentMoney = tonumber(getMoney(thePlayer, true)) or 0
-	if rest and amount > currentMoney then amount = math.max(0, currentMoney) end
-	if amount == 0 then return true, 0 end
-	if currentMoney < amount then return false, 0 end
-	local newBalance = currentMoney - amount
-
 	if elementType == "player" then
 		local characterID = tonumber(getElementData(thePlayer, "dbid"))
 		if not characterID or characterID < 1 then return false, 0 end
+		local currentMoney = fetchStoredBalance("characters", characterID, "money")
+		if not currentMoney then return false, 0 end
+		if rest and amount > currentMoney then amount = currentMoney end
+		if amount == 0 then return true, 0 end
+		if currentMoney < amount then return false, 0 end
+		local newBalance = currentMoney - amount
+
 		local removed, oldItems = removeMoneyItems(thePlayer)
 		if not removed then return false, 0 end
-		if not mysql:query_free("UPDATE characters SET money = money - " .. amount .. " WHERE id = " .. characterID .. " AND money >= " .. amount) then
+		if not mysql:query_free("UPDATE characters SET money = money - " .. amount
+			.. " WHERE id = " .. characterID .. " AND money = " .. currentMoney .. " AND money >= " .. amount) then
 			restoreMoneyItems(thePlayer, oldItems)
 			return false, 0
 		end
+		local savedBalance = fetchStoredBalance("characters", characterID, "money")
+		if savedBalance ~= newBalance then
+			restoreMoneyItems(thePlayer, oldItems)
+			outputDebugString("[global] Character debit could not be verified for ID " .. characterID, 1)
+			return false, 0
+		end
 		if not setMoneyElementData(thePlayer, newBalance) then
-			mysql:query_free("UPDATE characters SET money = money + " .. amount .. " WHERE id = " .. characterID)
+			rollbackStoredBalance("characters", characterID, "money", newBalance, currentMoney)
 			restoreMoneyItems(thePlayer, oldItems)
 			return false, 0
 		end
@@ -175,9 +217,22 @@ function takeMoney(thePlayer, amount, rest, toBank)
 	elseif elementType == "team" then
 		local factionID = tonumber(getElementData(thePlayer, "id"))
 		if not factionID or factionID < 1 then return false, 0 end
-		if not mysql:query_free("UPDATE factions SET bankbalance = bankbalance - " .. amount .. " WHERE id = " .. factionID) then return false, 0 end
+		local currentMoney = fetchStoredBalance("factions", factionID, "bankbalance")
+		if not currentMoney then return false, 0 end
+		if rest and amount > currentMoney then amount = currentMoney end
+		if amount == 0 then return true, 0 end
+		if currentMoney < amount then return false, 0 end
+		local newBalance = currentMoney - amount
+		if not mysql:query_free("UPDATE factions SET bankbalance = bankbalance - " .. amount
+			.. " WHERE id = " .. factionID .. " AND bankbalance = " .. currentMoney .. " AND bankbalance >= " .. amount) then
+			return false, 0
+		end
+		if fetchStoredBalance("factions", factionID, "bankbalance") ~= newBalance then
+			outputDebugString("[global] Faction debit could not be verified for ID " .. factionID, 1)
+			return false, 0
+		end
 		if not setMoneyElementData(thePlayer, newBalance) then
-			mysql:query_free("UPDATE factions SET bankbalance = bankbalance + " .. amount .. " WHERE id = " .. factionID)
+			rollbackStoredBalance("factions", factionID, "bankbalance", newBalance, currentMoney)
 			return false, 0
 		end
 		return true, amount
@@ -193,18 +248,37 @@ function setMoney(thePlayer, amount, onSpawn)
 	if not isElement(thePlayer) then return false end
 
 	local elementType = getElementType(thePlayer)
-	local currentMoney = tonumber(getMoney(thePlayer, true)) or 0
 	if elementType == "player" then
 		local characterID = tonumber(getElementData(thePlayer, "dbid"))
-		if not onSpawn and (not characterID or characterID < 1) then return false end
-		local removed, oldItems = removeMoneyItems(thePlayer)
-		if not removed then return false end
-		if not onSpawn and not mysql:query_free("UPDATE characters SET money = " .. amount .. " WHERE id = " .. characterID) then
-			restoreMoneyItems(thePlayer, oldItems)
+		local currentMoney = tonumber(getMoney(thePlayer, true)) or 0
+		local oldItems = {}
+		if characterID and characterID > 0 then
+			local storedBalance = fetchStoredBalance("characters", characterID, "money")
+			if storedBalance == nil then return false end
+			currentMoney = storedBalance
+			local removed
+			removed, oldItems = removeMoneyItems(thePlayer)
+			if not removed then return false end
+		elseif not onSpawn then
 			return false
 		end
+
+		if not onSpawn then
+			if not mysql:query_free("UPDATE characters SET money = " .. amount
+				.. " WHERE id = " .. characterID .. " AND money = " .. currentMoney) then
+				restoreMoneyItems(thePlayer, oldItems)
+				return false
+			end
+			local savedBalance = fetchStoredBalance("characters", characterID, "money")
+			if savedBalance ~= amount then
+				restoreMoneyItems(thePlayer, oldItems)
+				outputDebugString("[global] Character setMoney update could not be verified for ID " .. characterID, 1)
+				return false
+			end
+		end
+
 		if not setMoneyElementData(thePlayer, amount) then
-			if not onSpawn then mysql:query_free("UPDATE characters SET money = " .. currentMoney .. " WHERE id = " .. characterID) end
+			if not onSpawn then rollbackStoredBalance("characters", characterID, "money", amount, currentMoney) end
 			restoreMoneyItems(thePlayer, oldItems)
 			return false
 		end
@@ -222,15 +296,23 @@ function setMoney(thePlayer, amount, onSpawn)
 	elseif elementType == "team" then
 		local factionID = tonumber(getElementData(thePlayer, "id"))
 		if not factionID or factionID < 1 then return false end
-		if not mysql:query_free("UPDATE factions SET bankbalance = " .. amount .. " WHERE id = " .. factionID) then return false end
+		local currentMoney = fetchStoredBalance("factions", factionID, "bankbalance")
+		if currentMoney == nil then return false end
+		if not mysql:query_free("UPDATE factions SET bankbalance = " .. amount
+			.. " WHERE id = " .. factionID .. " AND bankbalance = " .. currentMoney) then return false end
+		if fetchStoredBalance("factions", factionID, "bankbalance") ~= amount then
+			outputDebugString("[global] Faction setMoney update could not be verified for ID " .. factionID, 1)
+			return false
+		end
 		if not setMoneyElementData(thePlayer, amount) then
-			mysql:query_free("UPDATE factions SET bankbalance = " .. currentMoney .. " WHERE id = " .. factionID)
+			rollbackStoredBalance("factions", factionID, "bankbalance", amount, currentMoney)
 			return false
 		end
 		return true
 	end
 	return false
 end
+
 function hasMoney(thePlayer, amount)
 	amount = tonumber(amount) or 0
 	if isElement(thePlayer) and amount >= 0 then
