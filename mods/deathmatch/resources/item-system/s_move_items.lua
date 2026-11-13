@@ -411,7 +411,8 @@ local function moveToElement(element, slot, ammo, event)
 						end
 					end
 				else
-					local getCurrentMaxAmmo = tonumber(exports.global:getWeaponCount(source, slot)) or 0
+					local weaponSlot = getSlotFromWeapon(slot)
+					local getCurrentMaxAmmo = weaponSlot and (getPedTotalAmmo(source, weaponSlot) or 0) or 0
 					if ammo > getCurrentMaxAmmo then
 						exports.global:sendMessageToAdmins("[items\moveToElement] Possible duplication of gun from '"..getPlayerName(source).."' // " .. getItemName( -slot ) )
 						exports.logs:dbLog(source, 39, source, getPlayerName(source) .. " moved " .. getItemName(-slot) .. " -  #" .. getElementID(element) .. " - BLOCKED DUE POSSIBLE DUPING" )
@@ -725,13 +726,15 @@ local function moveFromElement(element, slot, ammo, index)
 					outputChatBox("The armor item could not be removed from storage.", source, 255, 0, 0)
 					return false
 				end
-				output(element, source, item[1], nil, nil, item[5])
 				local itemArmor = tonumber(item[2]) or 0
 				local leftover = math.max(0, itemArmor - armor)
-				if leftover > 0 then
-					giveItem( element, item[1], leftover )
+				if leftover > 0 and not giveItem(element, item[1], leftover) then
+					if not giveItem(element, item[1], itemArmor) then
+						outputDebugString("[item-system] Failed to restore armor item after storage transfer error.", 1)
+					end
+					return false
 				end
-
+				output(element, source, item[1], nil, nil, item[5])
 				setPedArmor(source, math.ceil(getPedArmor(source) + math.min(itemArmor, armor)))
 				exports.logs:dbLog(source, 39, source, name .. " #" .. getElementID(element) .. "->" .. getPlayerName( source ) .. " - " .. getItemName( item[1], item[2], item[5] ) .. " - " .. ( math.min( item[2], armor ) ))
 			end
@@ -742,10 +745,11 @@ local function moveFromElement(element, slot, ammo, index)
 				outputChatBox("The ammunition item could not be removed from storage.", source, 255, 0, 0)
 				return false
 			end
-			output(element, source, item[1], nil, nil, item[5])
 			if ammo < itemAmmo then
 				if not giveWeapon(source, -item[1], ammo, true) then
-					giveItem(element, item[1], itemAmmo)
+					if not giveItem(element, item[1], itemAmmo) then
+						outputDebugString("[item-system] Failed to restore ammunition item after weapon grant failure.", 1)
+					end
 					return false
 				end
 				if not giveItem(element, item[1], itemAmmo - ammo) then
@@ -755,9 +759,15 @@ local function moveFromElement(element, slot, ammo, index)
 				end
 				exports.logs:dbLog(source, 39, source, name .. " #" .. getElementID(element) .. "->" .. getPlayerName(source) .. " - " .. getItemName(item[1], item[2], item[5]) .. " - " .. (itemAmmo - ammo))
 			else
-				if not giveWeapon(source, -item[1], itemAmmo, true) then giveItem(element, item[1], itemAmmo); return false end
-				exports.logs:dbLog(source, 39, {source, element}, name .. " #" .. getElementID(element) .. "->" .. getPlayerName( source ) .. " - " .. getItemName( item[1], item[2], item[5] ) .. " - " .. item[2])
+				if not giveWeapon(source, -item[1], itemAmmo, true) then
+					if not giveItem(element, item[1], itemAmmo) then
+						outputDebugString("[item-system] Failed to restore ammunition item after weapon grant failure.", 1)
+					end
+					return false
+				end
+				exports.logs:dbLog(source, 39, {source, element}, name .. " #" .. getElementID(element) .. "->" .. getPlayerName(source) .. " - " .. getItemName(item[1], item[2], item[5]) .. " - " .. itemAmmo)
 			end
+			output(element, source, item[1], nil, nil, item[5])
 			triggerClientEvent( source, "forceElementMoveUpdate", source )
 		end
 	else
