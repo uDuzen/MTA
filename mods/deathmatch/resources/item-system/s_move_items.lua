@@ -1,3 +1,5 @@
+local smallRadius = 5
+
 local function canAccessElement(player, element)
 	if not isElement(player) or getElementType(player) ~= "player" or not isElement(element) then
 		return false
