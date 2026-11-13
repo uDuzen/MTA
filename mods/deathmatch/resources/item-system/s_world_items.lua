@@ -7,6 +7,13 @@
 * ***********************************************************************************************************************
 ]]
 
+local function isWorldItemObject(item)
+	if not isElement(item) or getElementType(item) ~= "object" then return false end
+	local itemWorld = getResourceFromName("item-world")
+	local itemWorldRoot = itemWorld and getResourceRootElement(itemWorld)
+	return isElement(itemWorldRoot) and getElementParent(getElementParent(item)) == itemWorldRoot
+end
+
 -- Item protection
 function isProtected(player, item)
 	if not isElement(item) then
@@ -61,46 +68,49 @@ function canMove(player, item)
 end
 
 function protectItem(faction, item, slot)
-	--[[if getElementParent(getElementParent(source)) ~= getResourceRootElement(getResourceFromName("item-world")) then
-		return
-	end]]
-	if getElementData(source, "itemID") then
-		local itemID = getElementData(source, "itemID")
-		local index = getElementData( source, "id" )
-	    if itemID == 169 then --disable for keypadlock / maxime
-	      	return false
-	    end
+	local player = client
+	if not isElement(player) or getElementType(player) ~= "player"
+		or tonumber(getElementData(player, "loggedin")) ~= 1
+		or not exports.global:isStaffOnDuty(player) then return false end
+	if not isElement(source) then return false end
+	faction = tonumber(faction)
+	if not faction or faction ~= math.floor(faction) or faction < -100 then return false end
+	if faction > 0 and not isElement(exports.factions:getFactionFromID(faction)) then return false end
 
-		if type(faction) == "number" and exports.global:isStaffOnDuty(client) then
-			local protected = getElementData(source, "protected")
-			local out = 0
-			if protected then
-				exports.anticheat:changeProtectedElementDataEx(source, "protected", false)
-				outputChatBox("Unset", client, 0, 255, 0)
-				out = 0
-			else
-				exports.anticheat:changeProtectedElementDataEx(source, "protected", faction)
-				outputChatBox("Set to " .. faction .. " - if you want a different faction, /itemprotect [faction id or -100]", client, 255, 0, 0)
-				out = faction
-			end
-			result = mysql:query_free("UPDATE worlditems SET protected = " .. faction .. " WHERE id = " .. index )
+	if isWorldItemObject(source) then
+		local itemID = tonumber(getElementData(source, "itemID"))
+		local itemIndex = tonumber(getElementData(source, "id"))
+		if not itemID or itemID == 169 or not itemIndex or itemIndex < 1 then return false end
+		local currentProtection = tonumber(getElementData(source, "protected")) or 0
+		local newProtection = currentProtection ~= 0 and 0 or faction
+		if not mysql:query_free("UPDATE worlditems SET protected = " .. newProtection .. " WHERE id = " .. itemIndex .. " LIMIT 1") then
+			outputChatBox("World item protection could not be saved.", player, 255, 0, 0)
+			return false
 		end
-	else
-
-		if type(faction) == "number" and exports.global:isStaffOnDuty(client) then
-			local protected = item[4]
-			if protected ~= 0 and protected ~= nil then
-				updateProtection(item, 0, slot, source)
-				outputChatBox("Unset", client, 0, 255, 0)
-				out = 0
-			else
-				updateProtection(item, faction, slot, source)
-				outputChatBox("Set to " .. faction .. " - if you want a different faction, /itemprotect [faction id or -100]", client, 255, 0, 0)
-				out = faction
-			end
-			result = mysql:query_free("UPDATE items SET `protected` = " .. out .. " WHERE `index` = " .. tonumber(item[3]) )
-		end
+		exports.anticheat:changeProtectedElementDataEx(source, "protected", newProtection ~= 0 and newProtection or false, true)
+		outputChatBox(newProtection == 0 and "Protection removed." or ("Protection set to faction " .. newProtection .. "."), player, 0, 255, 0)
+		return true
 	end
+
+	local container = source
+	local itemSlot = tonumber(slot)
+	if not itemSlot or itemSlot < 1 or itemSlot ~= math.floor(itemSlot) then return false end
+	if not loadItems(container) then return false end
+	local items = getItems(container)
+	local inventoryItem = type(items) == "table" and items[itemSlot] or nil
+	if type(inventoryItem) ~= "table" or not tonumber(inventoryItem[3]) then return false end
+	local itemID = tonumber(inventoryItem[1])
+	if not itemID or itemID == 169 then return false end
+	local currentProtection = tonumber(inventoryItem[4]) or 0
+	local newProtection = currentProtection ~= 0 and 0 or faction
+	local itemIndex = tonumber(inventoryItem[3])
+	if not mysql:query_free("UPDATE items SET protected = " .. newProtection .. " WHERE `index` = " .. itemIndex .. " LIMIT 1") then
+		outputChatBox("Inventory item protection could not be saved.", player, 255, 0, 0)
+		return false
+	end
+	updateProtection(inventoryItem, newProtection, itemSlot, container)
+	outputChatBox(newProtection == 0 and "Protection removed." or ("Protection set to faction " .. newProtection .. "."), player, 0, 255, 0)
+	return true
 end
 addEvent("protectItem", true)
 addEventHandler("protectItem", root, protectItem)
