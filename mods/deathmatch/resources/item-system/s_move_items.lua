@@ -497,6 +497,26 @@ local function moveWorldItemToElement( item, element )
 		return
 	end
 
+	if itemID == 134 and getElementType(element) == "player" then
+		local amount = tonumber(itemValue)
+		local contents = getItems(item)
+		if not amount or amount ~= amount or amount == math.huge or amount <= 0
+			or type(contents) ~= "table" or #contents > 0 then
+			return false
+		end
+		if not exports.global:giveMoney(element, amount) then return false end
+		if not mysql:query_free("DELETE FROM worlditems WHERE id='" .. id .. "' LIMIT 1") then
+			if not exports.global:takeMoney(element, amount) then
+				outputDebugString("[item-system] Failed to reverse world cash pickup for world item " .. id, 1)
+			end
+			return false
+		end
+		output(source, element, itemID, itemValue, true, metadata)
+		exports.logs:dbLog(source, 39, source, getPlayerName(source) .. " picked up $" .. tostring(amount) .. " from world item #" .. id)
+		destroyElement(item)
+		return true
+	end
+
 	if giveItem( element, itemID, itemValue, false, false, metadata ) then
 		--[[
 		if itemID == 166 then --video player
