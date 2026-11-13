@@ -695,96 +695,68 @@ function doItemGivenChecks(player, itemID, itemValue)
 end
 
 local function moveItem(item, x, y, z)
-	if false then
-		return outputDebugString("[ITEM] moveItem / Disabled ")
+	local player = client or source
+	if client and source ~= client then return false end
+	if not isElement(player) or getElementType(player) ~= "player"
+		or tonumber(getElementData(player, "loggedin")) ~= 1
+		or not isWorldItemObject(item) then return false end
+
+	local itemID = tonumber(getElementData(item, "itemID"))
+	local itemIndex = tonumber(getElementData(item, "id"))
+	if not itemID or itemID ~= math.floor(itemID) or not itemIndex or itemIndex < 1 then return false end
+	if isWatchingTV(player) or isPedDead(player) or getElementData(player, "injuriedanimation") then return false end
+	if itemID == 169 then return false end
+	if not exports.global:isStaffOnDuty(player)
+		and ((itemID >= 31 and itemID <= 43) or itemBannedByAltAltChecker[itemID]) then
+		outputChatBox(getItemName(itemID) .. " can't be moved this way.", player, 255, 0, 0)
+		return false
+	end
+	if not canMove(player, item) then
+		outputChatBox("You can not move this item. Contact an admin via F1.", player, 255, 0, 0)
+		return false
+	end
+	if not z then
+		if not exports.integration:isPlayerTrialAdmin(player) then return false end
+		if not mysql:query_free("DELETE FROM worlditems WHERE id = " .. itemIndex .. " LIMIT 1") then return false end
+		destroyElement(item)
+		return true
 	end
 
-	if not item or not isElement(item) or getElementType(item) ~= 'object' then
-		outputChatBox("Errors occurred while moving this item. Please report on http://bugs.owlgaming.net", source, 255, 0, 0)
-		outputDebugString('[ITEM] Item is not found or not an object')
+	x, y, z = tonumber(x), tonumber(y), tonumber(z)
+	if not x or not y or not z or x ~= x or y ~= y or z ~= z
+		or x == math.huge or x == -math.huge or y == math.huge or y == -math.huge or z == math.huge or z == -math.huge
+		or math.abs(x) > 3000 or math.abs(y) > 3000 or z < -100 or z > 2000 then return false end
+	if not exports.integration:isPlayerTrialAdmin(player) and (itemID == 81 or itemID == 103) then return false end
+	if itemID == 138 and not exports.integration:isPlayerAdmin(player) then
+		outputChatBox("Only a Lead+ admin can move this item.", player, 255, 0, 0)
+		return false
+	end
+	if itemID == 139 and not exports.integration:isPlayerTrialAdmin(player) then
+		outputChatBox("Only a Super+ admin can move this item.", player, 255, 0, 0)
 		return false
 	end
 
-
-	if isWatchingTV(source) or isPedDead(source) or getElementData(source, "injuriedanimation") then
-		return false
-	end
-
-	local itemID = getElementData(item, "itemID")
-
-	if itemID == 169 then -- Keypad Door Lock / maxime
-		return false
-	end
-
-	--ANTI ALT-ALT / MAXIME
-	if not exports.global:isStaffOnDuty(source) then
-		if ((itemID >= 31) and (itemID <= 43)) or itemBannedByAltAltChecker[itemID] then
-			outputChatBox(getItemName( itemID ).." can't be moved this way.", source, 255, 0, 0)
+	local oldx, oldy, oldz = getElementPosition(item)
+	for _, nearbyPlayer in ipairs(getElementsByType("player")) do
+		if getPedContactElement(nearbyPlayer) == item then return false end
+		local px, py, pz = getElementPosition(nearbyPlayer)
+		if getDistanceBetweenPoints3D(oldx, oldy, oldz, px, py, pz) < 1 then
+			outputChatBox("Someone is trying to move the item you are standing on. Move out of the way.", nearbyPlayer, 255, 0, 0)
 			return false
 		end
 	end
 
-	local id = getElementData(item, "id")
-	if not ( z ) then
-		destroyElement(item)
-		exports.mysql:query_free("DELETE FROM worlditems WHERE id = " .. exports.mysql:escape_string(id))
-		return
+	if not mysql:query_free("UPDATE worlditems SET x = " .. x .. ", y = " .. y .. ", z = " .. z .. " WHERE id = " .. itemIndex) then
+		return false
 	end
-
-
-	if not canMove(source, item) then
-		outputChatBox("You can not move this item. Contact an admin via F1.", source, 255, 0, 0)
-		return
+	if itemID > 0 then
+		local rx, ry, rz, zoffset = getItemRotInfo(itemID)
+		z = z + zoffset
+	elseif itemID == 100 then
+		z = z + 0.1
 	end
-
-	-- fridges and shelves can't be moved
-	if not exports.integration:isPlayerTrialAdmin(source) and (itemID == 81 or itemID == 103) then
-		return
-	end
-
-	if itemID == 138 then
-		if not exports.integration:isPlayerAdmin(source) then
-			outputChatBox("Only a Lead+ admin can move this item.", source, 255, 0, 0)
-			return
-		end
-	end
-
-	if itemID == 139 and not exports.integration:isPlayerTrialAdmin(source) then
-		outputChatBox("Only a Super+ admin can move this item.", source, 255, 0, 0)
-		return
-	end
-
-	-- check if no-one is standing on the item (should be cancelled client-side), but just in case
-	local oldx, oldy, oldz = getElementPosition(item)
-	for key, value in ipairs(getElementsByType("player")) do
-		if getPedContactElement(value) == item then
-			return
-		end
-		if getDistanceBetweenPoints3D(oldx, oldy, oldz, getElementPosition(value)) < 1 then
-			outputChatBox("Someone is trying to move the element you are standing on(or very close to), Move out of the way!", value, 255, 0, 0)
-			return
-		end
-	end
-
-	local result = mysql:query_free("UPDATE worlditems SET x = " .. x .. ", y = " .. y .. ", z = " .. z .. " WHERE id = " .. getElementData( item, "id" ) )
-	if result then
-		if itemID > 0 then
-			local rx, ry, rz, zoffset = getItemRotInfo(itemID)
-			z = z + zoffset
-		elseif itemID == 100 then
-			z = z + 0.1
-		end
-
-		local playerX, playerY, playerZ = getElementPosition(source)
-		local playerVehicle = getElementPosition(source)
-
-		setElementPosition(item, x, y, z)
-
-		-- reset the player position if he was on foot (#673, #725)
-		if not playerVehicle then
-			setElementPosition(source, playerX, playerY, playerZ)
-		end
-	end
+	setElementPosition(item, x, y, z)
+	return true
 end
 addEvent("moveItem", true)
 addEventHandler("moveItem", getRootElement(), moveItem)
@@ -834,28 +806,35 @@ addEventHandler('item:move:save', root,
 	end)
 
 local function rotateItem(item, rz)
-	if not exports.integration:isPlayerTrialAdmin(source) then
-		return
-	end
-
-	local id = getElementData(item, "id")
+	local player = client or source
+	if client and source ~= client then return false end
+	if not isElement(player) or getElementType(player) ~= "player"
+		or tonumber(getElementData(player, "loggedin")) ~= 1
+		or not exports.integration:isPlayerTrialAdmin(player)
+		or not isWorldItemObject(item) then return false end
+	local itemIndex = tonumber(getElementData(item, "id"))
+	if not itemIndex or itemIndex < 1 then return false end
 	if not rz then
+		if not mysql:query_free("DELETE FROM worlditems WHERE id = " .. itemIndex .. " LIMIT 1") then return false end
 		destroyElement(item)
-		exports.mysql:query_free("DELETE FROM worlditems WHERE id = " .. exports.mysql:escape_string(id))
-		return
+		return true
 	end
-
-	local rx, ry, rzx = getElementRotation(item)
-	rz = rz + rzx
-	local result = mysql:query_free("UPDATE worlditems SET rz = " .. rz .. " WHERE id = " .. exports.mysql:escape_string(id) )
-	if result then
-		setElementRotation(item, rx, ry, rz)
-	end
+	rz = tonumber(rz)
+	if not rz or rz ~= rz or rz == math.huge or rz == -math.huge or math.abs(rz) > 360 then return false end
+	local rx, ry, currentRZ = getElementRotation(item)
+	local newRZ = rz + currentRZ
+	if not mysql:query_free("UPDATE worlditems SET rz = " .. newRZ .. " WHERE id = " .. itemIndex) then return false end
+	setElementRotation(item, rx, ry, newRZ)
+	return true
 end
 addEvent("rotateItem", true)
 addEventHandler("rotateItem", getRootElement(), rotateItem)
 
 function pickupItem(object, leftammo)
+	if client and client ~= source then return false end
+	if not isElement(source) or getElementType(source) ~= "player"
+		or tonumber(getElementData(source, "loggedin")) ~= 1
+		or not isWorldItemObject(object) then return false end
 	if disableCanDropPick then
 		outputChatBox("Item picking up is currently disabled. While our scripters are investigating the issue.", source, 255, 0, 0)
 		return outputDebugString("[ITEM] pickupItem / disabled ")
@@ -867,8 +846,9 @@ function pickupItem(object, leftammo)
 
 	local x, y, z = getElementPosition(source)
 	local ox, oy, oz = getElementPosition(object)
-
-	if not (getDistanceBetweenPoints3D(x, y, z, ox, oy, oz)<10) then
+	if getElementDimension(source) ~= getElementDimension(object)
+		or getElementInterior(source) ~= getElementInterior(object)
+		or getDistanceBetweenPoints3D(x, y, z, ox, oy, oz) >= 10 then
 		outputDebugString("Distance between Player and Pickup too large")
 		return false
 	end
@@ -883,13 +863,14 @@ function pickupItem(object, leftammo)
 	-- Animation
 
 	local id = tonumber(getElementData(object, "id"))
-	if not id then
-		outputChatBox("Error: No world item ID. Notify a scripter. (s_world_items)",source,255,0,0)
-		destroyElement(object)
-		return
+	if not id or id < 1 or id ~= math.floor(id) then
+		outputChatBox("Error: Invalid world item ID. Notify a scripter.", source, 255, 0, 0)
+		exports.anticheat:setEld(object, "transfering", nil, "all")
+		return false
 	end
 
-	local itemID = getElementData(object, "itemID")
+	local itemID = tonumber(getElementData(object, "itemID"))
+	if not itemID or itemID ~= math.floor(itemID) then exports.anticheat:setEld(object, "transfering", nil, "all"); return false end
 	if not canPickup(source, object) then
 		outputChatBox("You can not pick up this item. Contact an admin via F1.", source, 255, 0, 0)
 		exports.anticheat:setEld(object, "transfering", nil, 'all')
@@ -910,7 +891,7 @@ function pickupItem(object, leftammo)
 		local picker = getElementData(source, "dbid")
 		if creator ~= picker then
 			local accountCreator = exports.cache:getAccountFromCharacterId(creator)
-			if tonumber(accountCreator.id) == getElementData(source, "account:id") then
+			if accountCreator and tonumber(accountCreator.id) == tonumber(getElementData(source, "account:id")) then
 				outputChatBox("Transferring assets between characters in the same account or multiple accounts own by a player is strictly prohibited! ", source, 255, 0, 0)
 				exports.global:sendMessageToAdmins("[ANTI-ALT->ALT]: Detected illegal assets transferring on account name '"..getElementData(source, "account:username").."'.")
 				exports.global:sendMessageToAdmins("[ANTI-ALT->ALT]: Suspect is trying to transfer a "..getItemName( itemID ).." between alternatives.")
