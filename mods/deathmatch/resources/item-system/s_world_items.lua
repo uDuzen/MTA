@@ -158,9 +158,11 @@ function dropItem(itemID, x, y, z, ammo, keepammo, cancelAnim)
 	if ammo ~= nil then
 		ammo = tonumber(ammo)
 		keepammo = tonumber(keepammo) or 0
-		if itemID < 1 or itemID > 46 or not getWeaponNameFromID(itemID)
+		local isArmorDrop = itemID == 100
+		if (not isArmorDrop and (itemID < 1 or itemID > 46 or not getWeaponNameFromID(itemID)))
 			or not ammo or ammo < 1 or ammo ~= math.floor(ammo)
-			or keepammo < 0 or keepammo ~= math.floor(keepammo) or keepammo > 10000 then
+			or keepammo < 0 or keepammo ~= math.floor(keepammo) or keepammo > 10000
+			or (isArmorDrop and (keepammo ~= 0 or ammo > getPedArmor(source))) then
 			triggerClientEvent(source, "finishItemDrop", source)
 			return false
 		end
