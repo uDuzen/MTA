@@ -116,7 +116,9 @@ local function moveToElement(element, slot, ammo, event)
 		triggerClientEvent(source, "finishItemMove", source)
 		return false
 	end
-	if ammo then
+	if ammo == true and slot == -100 then
+		-- The client uses a boolean marker for the armor transfer path.
+	elseif ammo then
 		ammo = tonumber(ammo)
 		if not ammo or ammo ~= ammo or ammo == math.huge or ammo < 0 or ammo > 10000 or ammo ~= math.floor(ammo)
 			or (slot ~= -100 and (slot < 1 or slot > 46 or not getSlotFromWeapon(slot))) then
