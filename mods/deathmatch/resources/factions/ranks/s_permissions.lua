@@ -125,14 +125,28 @@ function setAllRankPermissions(rankID, permTable, newWage, factionID)
 	local factionID = tonumber(factionID)
 	local theTeam = factionID and getFactionFromID(factionID)
 	local rankInfo = FactionRanks[rankID]
-	if not isElement(theTeam) or type(rankInfo) ~= "table" or type(getElementData(theTeam, "wages")) ~= "table"
-		or type(newWage) ~= "number" or newWage ~= newWage or newWage < 0 or newWage > 2500 then
+	newWage = tonumber(newWage)
+	if not isElement(theTeam) or type(rankInfo) ~= "table"
+		or tonumber(rankInfo.faction_id) ~= factionID
+		or type(getElementData(theTeam, "wages")) ~= "table"
+		or not newWage or newWage ~= newWage or newWage == math.huge or newWage < 0 or newWage > 2500 then
 		return false
 	end
 	local factionWages = getElementData(theTeam, "wages")
 
-	table.sort(permTable)
-	permTable = table.concat(permTable, ",")
+	local normalizedPermissions, seenPermissions = {}, {}
+	for _, permission in ipairs(permTable) do
+		local permissionID = tonumber(permission)
+		if not permissionID or permissionID ~= math.floor(permissionID) or not mem_permissions[permissionID] then
+			return false
+		end
+		if not seenPermissions[permissionID] then
+			seenPermissions[permissionID] = true
+			table.insert(normalizedPermissions, permissionID)
+		end
+	end
+	table.sort(normalizedPermissions)
+	permTable = table.concat(normalizedPermissions, ",")
 	if not dbExec(exports.mysql:getConn("mta"), "UPDATE `faction_ranks` SET `permissions` = ?, `wage` = ? WHERE `id` = ?", permTable, newWage, rankID) then
 		return false
 	end
