@@ -564,13 +564,13 @@ end)
 -- /makeammo
 function givePlayerGunAmmo( thePlayer, commandName, targetPlayer, weap_id, rounds )
 	if exports["integration"]:isPlayerAdmin( thePlayer )  then
-		if not targetPlayer or not weap_id or not tonumber(weap_id) or not getWeaponNameFromID( tonumber(weap_id) ) then
+		if not targetPlayer or not weap_id or not tonumber(weap_id) or tonumber(weap_id) ~= math.floor(tonumber(weap_id)) or not getWeaponNameFromID(tonumber(weap_id)) then
 			outputChatBox("SYNTAX: /" .. commandName .. " [player partial nick/id] [weapon id] [rounds -optional]", thePlayer, 255, 194, 14)
 			outputChatBox("Info: https://wiki.multitheftauto.com/wiki/Weapons", thePlayer, 255, 194, 14)
 		else
 			local targetPlayer, targetPlayerName = exports.global:findPlayerByPartialNick( thePlayer, targetPlayer )
 			if targetPlayer then
-				if getElementData(targetPlayer, 'loggedin') ~= 1 then
+				if tonumber(getElementData(targetPlayer, 'loggedin')) ~= 1 then
 					outputChatBox("Player isn't logged in.", thePlayer, 255, 0, 0)
 					return
 				end
