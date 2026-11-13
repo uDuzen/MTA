@@ -11,24 +11,30 @@ local ACL_DETAILS = { username = "Scripter", password = false }
 
 mysql = exports.mysql
 local getPlayerName_ = getPlayerName
-getPlayerName = function( ... )
-	s = getPlayerName_( ... )
-	return s and s:gsub( "_", " " ) or s
+getPlayerName = function(...)
+	local playerName = getPlayerName_(...)
+	return playerName and playerName:gsub("_", " ") or playerName
 end
 
 MTAoutputChatBox = outputChatBox
-function outputChatBox( text, visibleTo, r, g, b, colorCoded )
-	if string.len(text) > 128 then -- MTA Chatbox size limit
-		MTAoutputChatBox( string.sub(text, 1, 127), visibleTo, r, g, b, colorCoded  )
-		outputChatBox( string.sub(text, 128), visibleTo, r, g, b, colorCoded  )
+function outputChatBox(text, visibleTo, r, g, b, colorCoded)
+	text = tostring(text or "")
+	if #text > 128 then -- MTA chatbox message limit
+		MTAoutputChatBox(text:sub(1, 127), visibleTo, r, g, b, colorCoded)
+		outputChatBox(text:sub(128), visibleTo, r, g, b, colorCoded)
 	else
-		MTAoutputChatBox( text, visibleTo, r, g, b, colorCoded  )
+		MTAoutputChatBox(text, visibleTo, r, g, b, colorCoded)
 	end
 end
 
 --ban banPlayerSerial ( player bannedPlayer,  player responsiblePlayer = nil, string reason = nil, bool hide = false )
 function banPlayerSerial(thePlayer, theAdmin, reason, hide)
+	if not isElement(thePlayer) or getElementType(thePlayer) ~= "player"
+		or not isElement(theAdmin) or getElementType(theAdmin) ~= "player" then
+		return false
+	end
 	local serial = getPlayerSerial(thePlayer)
+	reason = tostring(reason or "No reason specified"):sub(1, 255)
 	local result = mysql:query("SELECT * FROM bannedSerials")
 	if result then
 		while true do
@@ -36,7 +42,7 @@ function banPlayerSerial(thePlayer, theAdmin, reason, hide)
 			if not row then break end
 			if row["serial"] == serial then
 				exports.global:sendMessageToAdmins("BAN-SYSTEM: Player " .. getPlayerName(thePlayer):gsub("_", " ") .. " is already banned. Kicking the player")
-				exports.gloval:sendMessageToAdmins("            Serial: " .. serial)
+				exports.global:sendMessageToAdmins("            Serial: " .. serial)
 				kickPlayer(thePlayer, reason)
 				return
 			end
@@ -60,7 +66,7 @@ function banPlayerSerial(thePlayer, theAdmin, reason, hide)
 		exports.global:updateBans()
 		for key, value in ipairs(getElementsByType("player")) do
 			if getPlayerSerial(value) == serial then
-				kickPlayer(value, showingPlayer, reason)
+				kickPlayer(value, theAdmin, reason)
 			end
 		end
 	end
