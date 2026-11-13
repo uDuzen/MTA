@@ -220,7 +220,7 @@ setTimer(
 					local anyForVehicle = false
 					
 					for km, vm in pairs( mods ) do
-						if getRealTime( ).timestamp - vm < 5 * 60000 then
+						if getRealTime().timestamp - vm < 5 * 60 then
 							-- added more than five minutes ago
 							data[vehicle][km] = nil
 							changed = true
