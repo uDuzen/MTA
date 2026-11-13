@@ -308,34 +308,19 @@ local function moveToElement(element, slot, ammo, event)
 							delivered = exports.global:giveItem(element, 134, amount)
 						end
 						if delivered then
-							if takeItemFromSlot(source, slot) then
-								if getElementType(element) == "player" then
-									triggerEvent('sendAme', source, "gives $" .. exports.global:formatMoney(amount) .. " to " .. exports.global:getPlayerName(element) .. ".")
-								else
-									triggerEvent('sendAme', source, "puts $" .. exports.global:formatMoney(amount) .. " inside the " .. name .. ".")
-								end
-							else
-							local recipientReversed
+							-- takeMoney already replaces the player's cash voucher with the new balance.
 							if getElementType(element) == "player" then
-								recipientReversed = exports.global:takeMoney(element, amount)
+								triggerEvent('sendAme', source, "gives $" .. exports.global:formatMoney(amount) .. " to " .. exports.global:getPlayerName(element) .. ".")
 							else
-								recipientReversed = exports.global:takeItem(element, 134, amount)
+								triggerEvent('sendAme', source, "puts $" .. exports.global:formatMoney(amount) .. " inside the " .. name .. ".")
 							end
-							if recipientReversed then
-								if exports.global:giveMoney(source, amount) then
-									outputChatBox("Cash transfer failed and was rolled back.", source, 255, 0, 0)
-								else
-									outputChatBox("Cash rollback failed. Please contact staff.", source, 255, 0, 0)
-								end
+						else
+							if exports.global:giveMoney(source, amount) then
+								outputChatBox("Could not deliver the cash; the amount was returned to you.", source, 255, 0, 0)
 							else
-								outputDebugString("[item-system] Cash transfer rollback failed; recipient retains transferred cash.", 1)
-								outputChatBox("Cash transfer could not be rolled back. Please contact staff.", source, 255, 0, 0)
+								outputChatBox("Cash transfer rollback failed. Please contact staff.", source, 255, 0, 0)
 							end
 						end
-					else
-						exports.global:giveMoney(source, amount)
-						outputChatBox("Could not deliver the cash; the amount was returned to you.", source, 255, 0, 0)
-					end
 					end
 				else -- not money
 					if getElementType( element ) == "object" then
