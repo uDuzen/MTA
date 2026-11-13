@@ -119,7 +119,7 @@ local function moveToElement(element, slot, ammo, event)
 	if ammo then
 		ammo = tonumber(ammo)
 		if not ammo or ammo ~= ammo or ammo == math.huge or ammo < 0 or ammo > 10000 or ammo ~= math.floor(ammo)
-			or (slot ~= -100 and (slot < 1 or slot > 12)) then
+			or (slot ~= -100 and (slot < 1 or slot > 46 or not getSlotFromWeapon(slot))) then
 			triggerClientEvent(source, "finishItemMove", source)
 			return false
 		end
@@ -419,18 +419,18 @@ local function moveToElement(element, slot, ammo, event)
 						return
 					end
 					if ammo > 0 then
-						if not exports.global:takeWeapon(source, slot) then
+						if not takeWeapon(source, slot) then
 							return false
 						end
 						if giveItem(element, -slot, ammo) then
 							exports.logs:dbLog(source, 39, source, getPlayerName(source) .. " moved " .. getItemName(-slot) .. " - " .. ammo .. " #" .. getElementID(element))
 							output(source, element, -slot)
 						else
-							exports.global:giveWeapon(source, slot, ammo)
+							giveWeapon(source, slot, getCurrentMaxAmmo, true)
 							outputChatBox("Ammunition could not be stored; your weapon was restored.", source, 255, 0, 0)
 						end
 					else
-						exports.global:takeWeapon(source, slot)
+						takeWeapon(source, slot)
 					end
 				end
 			end
@@ -744,14 +744,18 @@ local function moveFromElement(element, slot, ammo, index)
 			end
 			output(element, source, item[1], nil, nil, item[5])
 			if ammo < itemAmmo then
-				if not exports.global:giveWeapon(source, -item[1], ammo) then
+				if not giveWeapon(source, -item[1], ammo, true) then
 					giveItem(element, item[1], itemAmmo)
 					return false
 				end
-				giveItem(element, item[1], itemAmmo - ammo)
-				exports.logs:dbLog(source, 39, source, name .. " #" .. getElementID(element) .. "->" .. getPlayerName( source ) .. " - " .. getItemName( item[1], item[2], item[5] ) .. " - " .. ( item[2] - ammo ))
+				if not giveItem(element, item[1], itemAmmo - ammo) then
+					if not giveWeapon(source, -item[1], itemAmmo - ammo, true) then
+						outputDebugString("[item-system] Failed to restore remaining ammunition for " .. getPlayerName(source), 1)
+					end
+				end
+				exports.logs:dbLog(source, 39, source, name .. " #" .. getElementID(element) .. "->" .. getPlayerName(source) .. " - " .. getItemName(item[1], item[2], item[5]) .. " - " .. (itemAmmo - ammo))
 			else
-				if not exports.global:giveWeapon(source, -item[1], itemAmmo) then giveItem(element, item[1], itemAmmo); return false end
+				if not giveWeapon(source, -item[1], itemAmmo, true) then giveItem(element, item[1], itemAmmo); return false end
 				exports.logs:dbLog(source, 39, {source, element}, name .. " #" .. getElementID(element) .. "->" .. getPlayerName( source ) .. " - " .. getItemName( item[1], item[2], item[5] ) .. " - " .. item[2])
 			end
 			triggerClientEvent( source, "forceElementMoveUpdate", source )
