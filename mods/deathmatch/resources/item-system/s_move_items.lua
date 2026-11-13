@@ -136,7 +136,12 @@ local function moveToElement(element, slot, ammo, event)
 	local name = getName(element)
 
 	if not ammo then
-		local item = getItems( source )[ slot ]
+		local sourceItems = getItems(source)
+		if type(sourceItems) ~= "table" then
+			triggerClientEvent(source, event or "finishItemMove", source)
+			return false
+		end
+		local item = sourceItems[slot]
 		if item then
 			-- ANTI ALT-ALT FOR NON AMMO ITEMS, CHECK THIS FUNCTION FOR AMMO ITEM BELOW AND FOR WORLD ITEM CHECK s_world_items.lua/ MAXIME
 			--31 -> 43  = DRUGS
@@ -270,7 +275,7 @@ local function moveToElement(element, slot, ammo, event)
 				if (item[1] == 134) then -- Money
 					if not exports.global:isStaffOnDuty(source) and not exports.global:isStaffOnDuty(element) then
 						local hoursPlayedFrom = tonumber(getElementData(source, "hoursplayed")) or 99
-						local hoursPlayedTo = tonumber(getElementData(element, "hoursplayed")) or 99 or 99
+						local hoursPlayedTo = tonumber(getElementData(element, "hoursplayed")) or 99
 						if (getElementType(element) == "player") and (getElementType(source) == "player") then
 							if hoursPlayedFrom < 10 or hoursPlayedTo < 10 then
 								outputChatBox("You require 10 hours of playing time to give money to another player.", source, 255, 0, 0)
@@ -325,7 +330,7 @@ local function moveToElement(element, slot, ammo, event)
 				else -- not money
 					if getElementType( element ) == "object" then
 						local elementModel = getElementModel(element)
-						local elementItemID = getElementData(element, "itemID")
+						elementItemID = getElementData(element, "itemID")
 						if elementItemID then
 							if elementItemID == 166 then --video player
 								if item[1] ~= 165 then --if item being moved to video player is not a valid video item
@@ -391,7 +396,7 @@ local function moveToElement(element, slot, ammo, event)
 		if not ( ( slot == -100 and hasSpaceForItem( element, slot ) ) or ( slot > 0 and hasSpaceForItem( element, -slot ) ) ) then
 			outputChatBox( "The Inventory is full.", source, 255, 0, 0 )
 		else
-			if tonumber(getElementData(source, "duty")) > 0 then
+			if (tonumber(getElementData(source, "duty")) or 0) > 0 then
 				outputChatBox("You can't put your weapons in a " .. name .. " while being on duty.", source, 255, 0, 0)
 			elseif tonumber(getElementData(source, "job")) == 4 and slot == 41 then
 				outputChatBox("You can't put this spray can into a " .. name .. ".", source, 255, 0, 0)
@@ -406,7 +411,7 @@ local function moveToElement(element, slot, ammo, event)
 						end
 					end
 				else
-					local getCurrentMaxAmmo = exports.global:getWeaponCount(source, slot)
+					local getCurrentMaxAmmo = tonumber(exports.global:getWeaponCount(source, slot)) or 0
 					if ammo > getCurrentMaxAmmo then
 						exports.global:sendMessageToAdmins("[items\moveToElement] Possible duplication of gun from '"..getPlayerName(source).."' // " .. getItemName( -slot ) )
 						exports.logs:dbLog(source, 39, source, getPlayerName(source) .. " moved " .. getItemName(-slot) .. " -  #" .. getElementID(element) .. " - BLOCKED DUE POSSIBLE DUPING" )
