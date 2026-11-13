@@ -13,7 +13,7 @@ dutyAllowChanges = { }
 function adminSetPlayerFaction(thePlayer, commandName, partialNick, factionID)
 	if exports.integration:isPlayerTrialAdmin(thePlayer) or exports.integration:isPlayerFMTLeader(thePlayer) then
 		factionID = tonumber(factionID)
-		if not (partialNick) or not (factionID) then
+		if not partialNick or not factionID or factionID < 1 or factionID ~= math.floor(factionID) then
 			outputChatBox("SYNTAX: /" .. commandName .. " [Player Partial Name/ID] [Faction ID]", thePlayer, 255, 194, 14)
 		else
 			local targetPlayer, targetPlayerNick = exports.global:findPlayerByPartialNick(thePlayer, partialNick)
@@ -64,7 +64,7 @@ addCommandHandler("setfaction", adminSetPlayerFaction, false, false)
 function adminRemovePlayerFaction(thePlayer, commandName, partialNick, factionID)
 	if exports.integration:isPlayerTrialAdmin(thePlayer) or exports.integration:isPlayerFMTLeader(thePlayer) then
 		factionID = tonumber(factionID)
-		if not (partialNick) or not (factionID) then
+		if not partialNick or not factionID or factionID < 1 or factionID ~= math.floor(factionID) then
 			outputChatBox("SYNTAX: /" .. commandName .. " [Player Partial Name/ID] [Faction ID]", thePlayer, 255, 194, 14)
 		else
 			local targetPlayer, targetPlayerNick = exports.global:findPlayerByPartialNick(thePlayer, partialNick)
@@ -77,7 +77,7 @@ function adminRemovePlayerFaction(thePlayer, commandName, partialNick, factionID
 				end
 
 				if dbExec(exports.mysql:getConn("mta"), "DELETE FROM characters_faction WHERE faction_id=? AND character_id=?", factionID, getElementData(targetPlayer, "dbid")) then
-					local factionInfo = getElementData(targetPlayer, "faction")
+					local factionInfo = getElementData(targetPlayer, "faction") or {}
 					local organizedTable = {}
 
 					for i, k in pairs(factionInfo) do
@@ -98,7 +98,7 @@ function adminRemovePlayerFaction(thePlayer, commandName, partialNick, factionID
 					factionInfo[factionID] = nil
 					exports.anticheat:changeProtectedElementDataEx(targetPlayer, "faction", factionInfo, true)
 
-					if getElementData(targetPlayer, "duty") and getElementData(targetPlayer, "duty") > 0 then
+					if (tonumber(getElementData(targetPlayer, "duty")) or 0) > 0 then
 						takeAllWeapons(targetPlayer)
 						exports.anticheat:changeProtectedElementDataEx(targetPlayer, "duty", 0, true)
 					end
@@ -117,7 +117,7 @@ addCommandHandler("removefaction", adminRemovePlayerFaction, false, false)
 function adminSetFactionLeader(thePlayer, commandName, partialNick, factionID)
 	if exports.integration:isPlayerAdmin(thePlayer) or exports.integration:isPlayerFMTLeader(thePlayer) then
 		factionID = tonumber(factionID)
-		if not (partialNick) or not (factionID)  then
+		if not partialNick or not factionID or factionID < 1 or factionID ~= math.floor(factionID) then
 			outputChatBox("SYNTAX: /" .. commandName .. " [Player Partial Name] [Faction ID]", thePlayer, 255, 194, 14)
 		elseif factionID > 0 then
 			local targetPlayer, targetPlayerNick = exports.global:findPlayerByPartialNick(thePlayer, partialNick)
@@ -173,12 +173,16 @@ addCommandHandler("setfactionleader", adminSetFactionLeader, false, false)
 function adminSetFactionRank(thePlayer, commandName, partialNick, factionID, ...)
 	if (exports.integration:isPlayerAdmin(thePlayer)) then
 		factionID = tonumber(factionID)
-		if not (partialNick) or not (...)  then
+		if not partialNick or not factionID or factionID < 1 or factionID ~= math.floor(factionID) or not (...) then
 			outputChatBox("SYNTAX: /" .. commandName .. " [Player Partial Name] [Faction ID] [Faction Rank, 1-20]", thePlayer, 255, 194, 14)
 		else
 			local targetPlayer, targetPlayerNick = exports.global:findPlayerByPartialNick(thePlayer, partialNick)
 			local rankName = table.concat({...}, " ")
-			local rankID = getRankIDbyName(factionID, rankName)
+			local rankID = tonumber(getRankIDbyName(factionID, rankName))
+			if not rankID or rankID < 1 or getRankFaction(rankID) ~= factionID then
+				outputChatBox("Invalid faction rank.", thePlayer, 255, 0, 0)
+				return false
+			end
 			if targetPlayer then
 				local theTeam = exports.pool:getElement("team", factionID)
 				if not isPlayerInFaction(targetPlayer, factionID) then
@@ -188,6 +192,7 @@ function adminSetFactionRank(thePlayer, commandName, partialNick, factionID, ...
 
 				if dbExec(exports.mysql:getConn("mta"), "UPDATE characters_faction SET faction_rank =? WHERE character_id = ? AND faction_id=?", rankID, getElementData(targetPlayer, "dbid"), factionID) then
 					local factionInfo = getElementData(targetPlayer, "faction")
+					if type(factionInfo) ~= "table" or type(factionInfo[factionID]) ~= "table" then return false end
 					factionInfo[factionID].rank = rankID
 					exports.anticheat:changeProtectedElementDataEx(targetPlayer, "faction", factionInfo, true)
 
@@ -248,9 +253,11 @@ function loadWelfare( )
 			unemployedPay = tonumber( result.value ) or 150
 		end
 	end
-	adminDutyStart()
 end
-addEventHandler( "onResourceStart", resourceRoot, loadWelfare )
+addEventHandler("onResourceStart", resourceRoot, function()
+	loadWelfare()
+	adminDutyStart()
+end)
 
 function getTax(thePlayer)
 	loadWelfare( )
@@ -273,11 +280,21 @@ function setFactionBudget(thePlayer, commandName, factionID, amount)
 				amount = tonumber(amount)
 
 				if (theTeam) then
-					if getElementData(theTeam, "type") >= 2 and getElementData(theTeam, "type") <= 6 then
-						if exports.global:takeMoney(getFactionFromName("Government of Los Santos"), amount) then
-							exports.global:giveMoney(theTeam, amount)
-							outputChatBox("You added $" .. exports.global:formatMoney(amount) .. " to the budget of '" .. getTeamName(theTeam) .. "' (Total: " .. exports.global:getMoney(theTeam) .. ").", thePlayer, 255, 194, 14)
-							mysql:query_free( "INSERT INTO wiretransfers (`from`, `to`, `amount`, `reason`, `type`) VALUES (" .. -3 .. ", " .. -getElementData(theTeam, "id") .. ", " .. amount .. ", '', 8)" )
+					local factionType = tonumber(getElementData(theTeam, "type")) or 0
+					if factionType >= 2 and factionType <= 6 then
+						local government = getFactionFromName("Government of Los Santos")
+						if not isElement(government) then
+							outputChatBox("Government account is unavailable.", thePlayer, 255, 194, 14)
+							return false
+						end
+						if exports.global:takeMoney(government, amount) then
+							if exports.global:giveMoney(theTeam, amount) then
+								outputChatBox("You added $" .. exports.global:formatMoney(amount) .. " to the budget of '" .. getTeamName(theTeam) .. "' (Total: " .. exports.global:getMoney(theTeam) .. ").", thePlayer, 255, 194, 14)
+								mysql:query_free("INSERT INTO wiretransfers (`from`, `to`, `amount`, `reason`, `type`) VALUES (-3, " .. -tonumber(getElementData(theTeam, "id")) .. ", " .. amount .. ", '', 8)")
+							else
+								exports.global:giveMoney(government, amount)
+								outputChatBox("The faction budget transfer failed and the payment was returned.", thePlayer, 255, 194, 14)
+							end
 						else
 							outputChatBox("You can't afford this.", thePlayer, 255, 194, 14)
 						end
@@ -299,7 +316,7 @@ function setTax(thePlayer, commandName, amount)
 	local isInFaction, rank = isPlayerInFaction(thePlayer, 3)
 	if isInFaction and rank >= 15 then
 		local amount = tonumber( amount )
-		if not amount or amount < 0 or amount > 30 then
+		if not amount or amount ~= amount or amount == math.huge or amount < 0 or amount > 30 then
 			outputChatBox("SYNTAX: /" .. commandName .. " [0-30%]", thePlayer, 255, 194, 14)
 		else
 			exports.global:setTaxAmount(amount)
@@ -313,7 +330,7 @@ function setIncomeTax(thePlayer, commandName, amount)
 	local isInFaction, rank = isPlayerInFaction(thePlayer, 3)
 	if isInFaction and rank >= 15 then
 		local amount = tonumber( amount )
-		if not amount or amount < 0 or amount > 25 then
+		if not amount or amount ~= amount or amount == math.huge or amount < 0 or amount > 25 then
 			outputChatBox("SYNTAX: /" .. commandName .. " [0-25%]", thePlayer, 255, 194, 14)
 		else
 			exports.global:setIncomeTaxAmount(amount)
@@ -327,10 +344,10 @@ function setWelfare(thePlayer, commandName, amount)
 	local isInFaction, rank = isPlayerInFaction(thePlayer, 3)
 	if isInFaction and rank >= 15 then
 		local amount = tonumber( amount )
-		if not amount or amount <= 0 then
+		if not amount or amount ~= amount or amount == math.huge or amount <= 0 or amount > 1000000 then
 			outputChatBox("SYNTAX: /" .. commandName .. " [Money]", thePlayer, 255, 194, 14)
-		elseif mysql:query_free( "UPDATE settings SET value = " .. unemployedPay .. " WHERE name = 'welfare'" ) then
-			unemployedPay = amount
+		elseif mysql:query_free("UPDATE settings SET value = " .. math.floor(amount) .. " WHERE name = 'welfare'") then
+			unemployedPay = math.floor(amount)
 			outputChatBox("New Welfare is $" .. exports.global:formatMoney(unemployedPay) .. "/payday", thePlayer, 0, 255, 0)
 		else
 			outputChatBox("Error 129314 - Report on Mantis.", thePlayer, 255, 0, 0)
