@@ -70,7 +70,7 @@ addEventHandler("givePlayerTicket", getRootElement(), function(player, fine, off
 	if not isTicketOfficer(officerPlayer) or not isElement(player) or getElementType(player) ~= "player"
 		or tonumber(getElementData(player, "loggedin")) ~= 1
 		or player == officerPlayer or not fine
-		or type(offences) ~= "string" or #offences > 100 then
+		or type(offences) ~= "string" or #offences < 1 or #offences > 100 then
 		return false
 	end
 	local ox, oy, oz = getElementPosition(officerPlayer)
@@ -185,7 +185,33 @@ addEventHandler("chargePlayer", getRootElement(), function(amount, method, crime
 		return false
 	end
 
-	local paid = method == 1 and exports.global:takeMoney(player, fine) or (method == 2 and exports.bank:takeBankMoney(player, fine))
+	local lawFaction = exports.factions:getFactionFromID(1)
+	local medicalFaction = exports.factions:getFactionFromID(3)
+	if not isElement(lawFaction) or not isElement(medicalFaction) then
+		processingTickets[lockKey] = nil
+		return false
+	end
+	local tax = tonumber(exports.global:getTaxAmount()) or 0
+	if tax < 0 or tax > 1 then tax = 0 end
+	local lawShare = math.floor((1 - tax) * fine)
+	local medicalShare = fine - lawShare
+
+	local paid = false
+	if method == 1 then
+		paid = exports.global:takeMoney(player, fine)
+	else
+		paid = exports.bank:takeBankMoney(player, fine)
+	end
+	local function restoreTicketAndPayment()
+		dbExec(exports.mysql:getConn('mta'),
+			"UPDATE `mdc_crimes` SET `punishment` = ? WHERE `id` = ? AND `character` = ? AND `punishment` = ?",
+			punishment, crimeID, characterID, paidText)
+		local refunded = method == 1 and exports.global:giveMoney(player, fine) or exports.bank:giveBankMoney(player, fine)
+		if not refunded then
+			outputDebugString("[pd-system] Failed to refund ticket payment for character " .. characterID .. ", ticket " .. crimeID, 1)
+			outputChatBox("Ticket payment rollback failed. Please contact staff immediately.", player, 255, 0, 0)
+		end
+	end
 	if not paid then
 		dbExec(exports.mysql:getConn('mta'),
 			"UPDATE `mdc_crimes` SET `punishment` = ? WHERE `id` = ? AND `character` = ? AND `punishment` = ?",
@@ -194,12 +220,23 @@ addEventHandler("chargePlayer", getRootElement(), function(amount, method, crime
 		return false
 	end
 
+	if not exports.global:giveMoney(lawFaction, lawShare) then
+		restoreTicketAndPayment()
+		processingTickets[lockKey] = nil
+		return false
+	end
+	if not exports.global:giveMoney(medicalFaction, medicalShare) then
+		if not exports.global:takeMoney(lawFaction, lawShare) then
+			outputDebugString("[pd-system] Failed to reverse law-faction ticket credit " .. crimeID, 1)
+		end
+		restoreTicketAndPayment()
+		processingTickets[lockKey] = nil
+		return false
+	end
+
 	if method == 2 then
 		outputChatBox("$" .. exports.global:formatMoney(fine) .. " has been taken from your bank account.", player, 0, 255, 0)
 	end
-	local tax = exports.global:getTaxAmount()
-	exports.global:giveMoney(exports.factions:getFactionFromID(1), math.ceil((1-tax)*fine))
-	exports.global:giveMoney(exports.factions:getFactionFromID(3), math.ceil(tax*fine))
 
 	if type(date) == "string" and #date <= 64 then
 		for i, item in ipairs(exports["item-system"]:getItems(player) or {}) do
