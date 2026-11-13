@@ -51,47 +51,89 @@ function addUpgrade( source, vehicle, itemSlot, itemID, itemValue )
 end
 
 --
-function moveUpgradeFromElement( upgrade )
-	if isVehicleLocked( source ) and getPedOccupiedVehicle( client ) ~= source then
-		triggerClientEvent( client, "finishItemMove", client )
-		return
+function moveUpgradeFromElement(upgrade)
+	local player = client
+	local vehicle = source
+	local function finishMove()
+		if isElement(player) then triggerClientEvent(player, "finishItemMove", player) end
 	end
-	
-	local data = getElementData( client, "v:mods" )
-	local admin = false
-	if not data or not data[ source ] or not data[ source ][ upgrade ] then
-		if not exports.integration:isPlayerTrialAdmin( client ) then
-			triggerClientEvent( client, "finishItemMove", client )
-			return
-		else
-			admin = true
-		end
+	if not isElement(player) or getElementType(player) ~= "player"
+		or tonumber(getElementData(player, "loggedin")) ~= 1
+		or not isElement(vehicle) or getElementType(vehicle) ~= "vehicle" then
+		finishMove()
+		return false
 	end
 
-	if hasSpaceForItem( client, 114, upgrade ) then
-		if removeVehicleUpgrade( source, upgrade ) then
-			if not admin then
-				data[ source ][ upgrade ] = nil
-				if isElement(source) then
-					exports.anticheat:changeProtectedElementDataEx( source, "v:mods", data, true)
-				else
-					outputDebugString("AntiCheat Error on line 70", 2)
-				end
-			end
-			
-			giveItem( client, 114, upgrade )
-			exports.logs:dbLog(client, 6, { client, source }, "REMOVEUPGRADE ".. upgrade .. " " .. getVehicleUpgradeSlotName(upgrade) .. " | Only cause of being an admin = " .. tostring(admin))
-			x_output_wrapper( source, client, 114, upgrade )
-			triggerClientEvent( client, "forceElementMoveUpdate", client )
-			
-			exports.vehicle:saveVehicleMods(source)
-		else
-			outputChatBox( "Vehicle upgrade does not exist?", client, 255, 0, 0 )
-		end
-	else
-		outputChatBox( "Your Inventory is full.", client, 255, 0, 0 )
+	upgrade = tonumber(upgrade)
+	if not upgrade or upgrade < 1000 or upgrade > 1193 or upgrade ~= math.floor(upgrade)
+		or not getVehicleUpgradeSlotName(upgrade) then
+		finishMove()
+		return false
 	end
-	triggerClientEvent( client, "finishItemMove", client )
+	local px, py, pz = getElementPosition(player)
+	local vx, vy, vz = getElementPosition(vehicle)
+	if getElementDimension(player) ~= getElementDimension(vehicle)
+		or getElementInterior(player) ~= getElementInterior(vehicle)
+		or getDistanceBetweenPoints3D(px, py, pz, vx, vy, vz) > 5 then
+		finishMove()
+		return false
+	end
+	if isVehicleLocked(vehicle) and getPedOccupiedVehicle(player) ~= vehicle then
+		finishMove()
+		return false
+	end
+
+	local upgrades = getVehicleUpgrades(vehicle)
+	local installed = false
+	for _, installedUpgrade in ipairs(upgrades) do
+		if installedUpgrade == upgrade then
+			installed = true
+			break
+		end
+	end
+	if not installed then
+		outputChatBox("Vehicle upgrade does not exist.", player, 255, 0, 0)
+		finishMove()
+		return false
+	end
+
+	local data = getElementData(player, "v:mods")
+	local tracked = type(data) == "table" and type(data[vehicle]) == "table"
+		and data[vehicle][upgrade] ~= nil
+	local admin = exports.integration:isPlayerTrialAdmin(player)
+	if not tracked and not admin then
+		finishMove()
+		return false
+	end
+	if not hasSpaceForItem(player, 114, upgrade) then
+		outputChatBox("Your inventory is full.", player, 255, 0, 0)
+		finishMove()
+		return false
+	end
+
+	if not removeVehicleUpgrade(vehicle, upgrade) then
+		outputChatBox("Vehicle upgrade could not be removed.", player, 255, 0, 0)
+		finishMove()
+		return false
+	end
+	if not giveItem(player, 114, upgrade) then
+		addVehicleUpgrade(vehicle, upgrade)
+		outputChatBox("The upgrade could not be added to your inventory. The vehicle upgrade was restored.", player, 255, 0, 0)
+		finishMove()
+		return false
+	end
+
+	if tracked then
+		data[vehicle][upgrade] = nil
+		if next(data[vehicle]) == nil then data[vehicle] = nil end
+		exports.anticheat:changeProtectedElementDataEx(player, "v:mods", data, true)
+	end
+	exports.logs:dbLog(player, 6, { player, vehicle }, "REMOVEUPGRADE " .. upgrade .. " " .. getVehicleUpgradeSlotName(upgrade) .. " | Admin override = " .. tostring(admin))
+	x_output_wrapper(vehicle, player, 114, upgrade)
+	exports.vehicle:saveVehicleMods(vehicle)
+	triggerClientEvent(player, "forceElementMoveUpdate", player)
+	finishMove()
+	return true
 end
 addEvent( "item:vehicle:removeUpgrade", true )
 addEventHandler( "item:vehicle:removeUpgrade", getRootElement(), moveUpgradeFromElement )
