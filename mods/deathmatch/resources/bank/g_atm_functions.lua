@@ -160,51 +160,45 @@ function no_(text)
 end
 
 --ANTI-ALT->ALT
-function areYouAltAlting(thePlayer, card1, target_id)
-	local playerAccID = getElementData(thePlayer, "account:id")
-	local playerCharID = getElementData(thePlayer, "dbid")
-	local playerName = getPlayerName(thePlayer)
-	
-	if not target_id then --IF WITHDRAW
-		if playerCharID ~= tonumber(card1[3]) then
-			local antiAltAlt = mysql:query_fetch_assoc("SELECT `charactername` FROM `characters` WHERE `characters`.`account`='"..toSQL(playerAccID).."' AND `characters`.`id`='"..toSQL(card1[3]).."' LIMIT 1") or false
-			if antiAltAlt and antiAltAlt["charactername"] and string.len(antiAltAlt["charactername"])>0 then --DETECTED ALT-ALT BETWEEN CHARS IN SAME ACCOUNT
-				return "between alts"
-			end
-			
-			--[[local cardOwnerIP = mysql:query_fetch_assoc(" SELECT `ip` FROM accounts a LEFT JOIN characters c ON a.id = c.account WHERE c.id='"..toSQL(card1[3]).."' LIMIT 1") or false
-			local qh = dbQuery("SELECT `ip` FROM accounts WHERE id=? LIMIT 1", playerAccID)
-			local playerIP = dbPoll(qh, 10000) or false
-			if cardOwnerIP and playerIP and #playerIP > 0 and cardOwnerIP == playerIP[1].ip then -- DETECTED ALT-ALT OVER ACCOUNTS ON THE SAME IP ADDRESS
-				return "between chars over the same ip"
-			end]]
-			
-			local cardOwnerSerial = mysql:query_fetch_assoc(" SELECT `mtaserial` FROM account_details a LEFT JOIN characters c ON a.account_id = c.account WHERE c.id='"..toSQL(card1[3]).."' LIMIT 1") or false
-			local playerSerial = getPlayerSerial(thePlayer)
-			if cardOwnerSerial and playerSerial and cardOwnerSerial == playerSerial then -- DETECTED ALT-ALT OVER ACCOUNTS ON THE SAME MTA SERIAL
-				return "between chars over the same mtaserial"
-			end
-		end
-	elseif target_id then -- TRANSFER
-		local antiAltAlt = mysql:query_fetch_assoc("SELECT `charactername` FROM `characters` WHERE `characters`.`account`='"..toSQL(playerAccID).."' AND `characters`.`id`='"..toSQL(target_id).."' LIMIT 1") or false
-		if antiAltAlt and antiAltAlt["charactername"] and string.len(antiAltAlt["charactername"])>0 then --DETECTED ALT-ALT BETWEEN CHARS IN SAME ACCOUNT
-			return "between alts"
-		end
-		
-		--[[local cardOwnerIP = mysql:query_fetch_assoc(" SELECT `ip` FROM accounts a LEFT JOIN characters c ON a.id = c.account WHERE c.id='"..toSQL(target_id).."' LIMIT 1") or false
-		local playerIP = mysql:query_fetch_assoc(" SELECT `ip` FROM accounts WHERE id='"..toSQL(playerAccID).."' LIMIT 1") or false
-		if cardOwnerIP and playerIP and cardOwnerIP == playerIP then -- DETECTED ALT-ALT OVER ACCOUNTS ON THE SAME IP ADDRESS
-			return "between chars over the same ip"
-		end]]
-		
-		local cardOwnerSerial = mysql:query_fetch_assoc(" SELECT `mtaserial` FROM account_details a LEFT JOIN characters c ON a.account_id = c.account WHERE c.id='"..toSQL(target_id).."' LIMIT 1") or false
-		local playerSerial = getPlayerSerial(thePlayer)
-		if cardOwnerSerial and playerSerial and cardOwnerSerial == playerSerial then -- DETECTED ALT-ALT OVER ACCOUNTS ON THE SAME MTA SERIAL
-			return "between chars over the same mtaserial"
-		end
+local function getCharacterAccountAndSerial(characterID)
+	local id = tonumber(characterID)
+	if not id or id < 1 or id ~= math.floor(id) then return false end
+	return mysql:query_fetch_assoc("SELECT c.account, a.mtaserial FROM characters c "
+		.. "LEFT JOIN account_details a ON a.account_id = c.account WHERE c.id = " .. id .. " LIMIT 1")
+end
+
+function areYouAltAlting(thePlayer, cardInfo, targetID)
+	if not isElement(thePlayer) or getElementType(thePlayer) ~= "player"
+		or tonumber(getElementData(thePlayer, "loggedin")) ~= 1
+		or type(cardInfo) ~= "table" then
+		return false
+	end
+	local cardOwnerID = tonumber(cardInfo[3])
+	local accountID = tonumber(getElementData(thePlayer, "account:id"))
+	local playerCharacterID = tonumber(getElementData(thePlayer, "dbid"))
+	if not cardOwnerID or cardOwnerID < 1 or not accountID or accountID < 1
+		or not playerCharacterID or playerCharacterID < 1 then
+		return false
+	end
+
+	local comparisonID = targetID and tonumber(targetID) or cardOwnerID
+	if not comparisonID or comparisonID < 1 or comparisonID ~= math.floor(comparisonID) then
+		return false
+	end
+	if comparisonID == playerCharacterID then return false end
+
+	local comparison = getCharacterAccountAndSerial(comparisonID)
+	if not comparison then return false end
+	if tonumber(comparison.account) == accountID then
+		return "between alts"
+	end
+
+	local playerSerial = tostring(getPlayerSerial(thePlayer) or "")
+	local comparisonSerial = tostring(comparison.mtaserial or "")
+	if playerSerial ~= "" and comparisonSerial ~= "" and playerSerial == comparisonSerial then
+		return "between chars over the same mtaserial"
 	end
 	return false
-	
 end
 
 function disableATMCard(carNo)
