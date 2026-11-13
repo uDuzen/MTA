@@ -835,6 +835,10 @@ function takePlayerItem(thePlayer, commandName, targetPlayer, itemID, ...)
             if targetPlayer then
                 local logged = tonumber(getElementData(targetPlayer, "loggedin"))
                 local itemValue = table.concat({...}, " ")
+                if #itemValue > 1024 then
+                    outputChatBox("Item value is too long.", thePlayer, 255, 0, 0)
+                    return false
+                end
                 itemID = tonumber(itemID)
                 if not itemID or itemID == 0 or itemID < -100 or itemID > 1000 or itemID ~= math.floor(itemID) then
                     outputChatBox("Invalid item ID.", thePlayer, 255, 0, 0)
@@ -855,9 +859,10 @@ function takePlayerItem(thePlayer, commandName, targetPlayer, itemID, ...)
                 local displayItemName = exports['item-system']:getItemName(itemID)
                
  
-                if (logged==0) then
+                if logged ~= 1 then
                     outputChatBox("Player is not logged in.", thePlayer, 255, 0, 0)
-                elseif (logged==1) then
+                    return false
+                else
                     if exports.global:hasItem(targetPlayer, itemID, itemValue) then
                         if (commandName == "delplayeritem") then
                             local removed = exports.global:takeItem(targetPlayer, itemID, itemValue)
