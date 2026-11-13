@@ -123,7 +123,7 @@ local function moveToElement(element, slot, ammo, event)
 		ammo = tonumber(ammo)
 		if not ammo or ammo ~= ammo or ammo == math.huge or ammo < 0 or ammo > 10000 or ammo ~= math.floor(ammo)
 			or (slot ~= -100 and (slot < 1 or slot > 46 or not weaponSlot or weaponSlot == 0)) then
-			triggerClientEvent(source, "finishItemMove", source)
+			finishMove()
 			return false
 		end
 	elseif slot < 1 then
@@ -384,7 +384,7 @@ local function moveToElement(element, slot, ammo, event)
 							if getResourceFromName("shader_snow_ground") and getResourceState(getResourceFromName("shader_snow_ground")) == "running" then
 								local driver = getVehicleController(element)
 								local hasSnowTires = true --hasItem(element, 212)
-								triggerClientEvent(driver, "shader_snow_ground:applySlippery", root, element, hasSnowTires)
+								if isElement(driver) then triggerClientEvent(driver, "shader_snow_ground:applySlippery", root, element, hasSnowTires) end
 							end
 						end
 						--exports.logs:dbLog(source, 39, source, getPlayerName( source ) .. "->" .. name .. " #" .. getElementID(element) .. " - " .. getItemName( item[1] ) .. " - " .. item[2] )
