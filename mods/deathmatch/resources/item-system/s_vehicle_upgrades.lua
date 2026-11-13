@@ -1,55 +1,126 @@
-function addUpgrade( source, vehicle, itemSlot, itemID, itemValue )
-	-- check for existing upgrades
-	local old_upgrades = getVehicleUpgrades(vehicle)
-	local old_upgrade = nil
-	for key, value in ipairs(old_upgrades) do
-		if value == itemValue then
-			outputChatBox("This Upgrade is already added.", source, 255, 0, 0)
-			return
-		elseif getVehicleUpgradeSlotName(value) == getVehicleUpgradeSlotName(itemValue) then
-			old_upgrade = value
-		end
+function addUpgrade(player, vehicle, itemSlot, itemID, itemValue)
+	if not isElement(player) or getElementType(player) ~= "player"
+		or tonumber(getElementData(player, "loggedin")) ~= 1
+		or not isElement(vehicle) or getElementType(vehicle) ~= "vehicle"
+		or getPedOccupiedVehicle(player) ~= vehicle then
+		return false
 	end
-	
-	if getElementData(vehicle, "job") ~= 0 or getElementData(vehicle, "owner") == -2 then
-		outputChatBox("You can't install upgrades to civilian vehicles!", source, 255, 0, 0)
-		return
-	end
-	
-	-- upgrade is not added yet, try it
-	if takeItemFromSlot(source, itemSlot) then
-		if addVehicleUpgrade(vehicle, itemValue) then
-			local data = getElementData( source, "v:mods" ) or {}
-			
-			if old_upgrade then
-				giveItem(source, itemID, old_upgrade)
-				exports.logs:dbLog(source, 6, { vehicle }, "MODDING AUTOREMOVEUPGRADE ".. itemValue .. " " .. getItemDescription(itemID, itemValue))
-				if data[vehicle] then
-					data[vehicle][old_upgrade] = nil
-				end
-			end
-			exports.logs:dbLog(source, 6, { vehicle }, "MODDING ADDUPGRADE ".. itemValue .. " " .. getItemDescription(itemID, itemValue))
-			exports.global:sendLocalMeAction(source, "adds " .. getItemDescription(itemID, itemValue) .. " to their " .. exports.global:getVehicleName(vehicle).."("..getVehicleName(vehicle) .. ").")
-			exports.vehicle:saveVehicleMods(vehicle)
-			
-			if not data[vehicle] then
-				data[vehicle] = {}
-			end
-			data[vehicle][itemValue] = getRealTime( ).timestamp
-			if isElement(source) then
-				exports.anticheat:changeProtectedElementDataEx( source, "v:mods", data, true)
-			else
-				outputDebugString("AntiCheat Error on line 35", 2)
-			end
-		else
-			outputChatBox("This upgrade is not compatible to this " .. exports.global:getVehicleName(vehicle) .. ".", source, 255, 194, 14)
-			giveItem( source, itemID, itemValue )
-		end
-	else
-		outputChatBox("Failed to take item.", source, 255, 194, 14)
-	end
-end
 
+	itemSlot = tonumber(itemSlot)
+	itemID = tonumber(itemID)
+	local upgradeID = tonumber(itemValue)
+	if not itemSlot or itemSlot < 1 or itemSlot ~= math.floor(itemSlot)
+		or itemID ~= 114 or not upgradeID or upgradeID < 1000 or upgradeID > 1193
+		or upgradeID ~= math.floor(upgradeID) or not getVehicleUpgradeSlotName(upgradeID) then
+		return false
+	end
+	local loaded = loadItems(player)
+	if not loaded then
+		outputChatBox("Your inventory could not be loaded. Please try again.", player, 255, 0, 0)
+		return false
+	end
+	local inventory = getItems(player)
+	local selectedItem = type(inventory) == "table" and inventory[itemSlot] or nil
+	if type(selectedItem) ~= "table" or tonumber(selectedItem[1]) ~= itemID
+		or tonumber(selectedItem[2]) ~= upgradeID then
+		outputChatBox("That upgrade is no longer in the selected slot.", player, 255, 0, 0)
+		return false
+	end
+
+	local noUpgrades = { Boat = true, Helicopter = true, Plane = true, Train = true, BMX = true }
+	if noUpgrades[getVehicleType(vehicle)] then
+		outputChatBox("This vehicle type cannot use upgrades.", player, 255, 0, 0)
+		return false
+	end
+	if (tonumber(getElementData(vehicle, "job")) or 0) ~= 0
+		or tonumber(getElementData(vehicle, "owner")) == -2 then
+		outputChatBox("You can't install upgrades to this vehicle.", player, 255, 0, 0)
+		return false
+	end
+
+	local compatible = getVehicleCompatibleUpgrades(vehicle)
+	local isCompatible = false
+	for _, compatibleUpgrade in ipairs(compatible or {}) do
+		if tonumber(compatibleUpgrade) == upgradeID then
+			isCompatible = true
+			break
+		end
+	end
+	if not isCompatible then
+		outputChatBox("This upgrade is not compatible with this vehicle.", player, 255, 194, 14)
+		return false
+	end
+
+	local oldUpgrade
+	for _, installedUpgrade in ipairs(getVehicleUpgrades(vehicle)) do
+		if installedUpgrade == upgradeID then
+			outputChatBox("This upgrade is already installed.", player, 255, 0, 0)
+			return false
+		end
+		if getVehicleUpgradeSlotName(installedUpgrade) == getVehicleUpgradeSlotName(upgradeID) then
+			oldUpgrade = installedUpgrade
+			break
+		end
+	end
+
+	if not takeItemFromSlot(player, itemSlot) then
+		outputChatBox("Failed to take the upgrade from your inventory.", player, 255, 0, 0)
+		return false
+	end
+	local function restoreNewUpgradeItem()
+		if not giveItem(player, itemID, upgradeID) then
+			outputDebugString("[item-system] Failed to restore upgrade item " .. upgradeID .. " to " .. getPlayerName(player), 1)
+			outputChatBox("Upgrade rollback failed. Contact staff immediately.", player, 255, 0, 0)
+			return false
+		end
+		return true
+	end
+	local oldRemoved = false
+	if oldUpgrade then
+		if not removeVehicleUpgrade(vehicle, oldUpgrade) then
+			restoreNewUpgradeItem()
+			outputChatBox("The previous upgrade could not be removed.", player, 255, 0, 0)
+			return false
+		end
+		oldRemoved = true
+	end
+
+	if not addVehicleUpgrade(vehicle, upgradeID) then
+		if oldRemoved and not addVehicleUpgrade(vehicle, oldUpgrade) then
+			outputDebugString("[item-system] Failed to restore old vehicle upgrade " .. oldUpgrade .. " on rollback.", 1)
+			outputChatBox("Vehicle upgrade rollback failed. Contact staff immediately.", player, 255, 0, 0)
+		end
+		restoreNewUpgradeItem()
+		outputChatBox("This upgrade could not be installed.", player, 255, 194, 14)
+		return false
+	end
+
+	if oldUpgrade and not giveItem(player, itemID, oldUpgrade) then
+		removeVehicleUpgrade(vehicle, upgradeID)
+		local oldRestored = addVehicleUpgrade(vehicle, oldUpgrade)
+		local newRestored = restoreNewUpgradeItem()
+		if not oldRestored or not newRestored then
+			outputDebugString("[item-system] Failed to rollback replacement of vehicle upgrade on " .. getPlayerName(player), 1)
+			outputChatBox("Vehicle upgrade replacement rollback failed. Contact staff immediately.", player, 255, 0, 0)
+		end
+		return false
+	end
+
+	local data = getElementData(player, "v:mods")
+	if type(data) ~= "table" then data = {} end
+	if type(data[vehicle]) ~= "table" then data[vehicle] = {} end
+	if oldUpgrade then data[vehicle][oldUpgrade] = nil end
+	data[vehicle][upgradeID] = getRealTime().timestamp
+	exports.anticheat:changeProtectedElementDataEx(player, "v:mods", data, true)
+
+	if oldUpgrade then
+		exports.logs:dbLog(player, 6, { vehicle }, "MODDING AUTOREMOVEUPGRADE " .. upgradeID .. " " .. getItemDescription(itemID, upgradeID))
+	end
+	exports.logs:dbLog(player, 6, { vehicle }, "MODDING ADDUPGRADE " .. upgradeID .. " " .. getItemDescription(itemID, upgradeID))
+	exports.vehicle:saveVehicleMods(vehicle)
+	exports.global:sendLocalMeAction(player, "adds " .. getItemDescription(itemID, upgradeID) .. " to their " .. exports.global:getVehicleName(vehicle) .. ".")
+	return true
+end
 --
 function moveUpgradeFromElement(upgrade)
 	local player = client
