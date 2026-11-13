@@ -37,24 +37,24 @@ function givePlayerJob(jobID)
 	end
 	local charID = tonumber(getElementData(player, "dbid"))
 	if not charID or charID < 1 or charID ~= math.floor(charID) then return false end
-	if not mysql:query_free("UPDATE `characters` SET `job` = " .. jobID .. " WHERE `id` = " .. charID .. " AND `job` = 0") then
+	if not mysql:query_free("UPDATE `characters` SET `job` = " .. jobID .. " WHERE `id` = " .. charID .. " AND `job` = 0")
+		or not fetchJobInfoForOnePlayer(player) or tonumber(getElementData(player, "job")) ~= jobID then
 		return false
 	end
 	if jobID == 4 then -- CITY MAINTENANCE
 		if not exports.global:giveItem(player, 115, "41:1:Spraycan") then
 			mysql:query_free("UPDATE characters SET job = 0 WHERE id = " .. charID .. " AND job = 4")
+			fetchJobInfoForOnePlayer(player)
 			return false
 		end
 		if not mysql:query_free("UPDATE characters SET tag = 9 WHERE id = " .. charID) then
 			exports.global:takeItem(player, 115, "41:1:Spraycan")
 			mysql:query_free("UPDATE characters SET job = 0 WHERE id = " .. charID .. " AND job = 4")
+			fetchJobInfoForOnePlayer(player)
 			return false
 		end
 		outputChatBox("Use this spray to paint over the graffiti you find.", player, 255, 194, 14)
 		exports.anticheat:changeProtectedElementDataEx(player, "tag", 9, false)
-	end
-	if not fetchJobInfoForOnePlayer(player) then
-		outputDebugString("[Job system] Job was saved but player job data could not be refreshed for " .. getPlayerName(player), 1)
 	end
 	return true
 end
@@ -62,10 +62,8 @@ addEvent("acceptJob", true)
 addEventHandler("acceptJob", getRootElement(), givePlayerJob)
 
 function fetchJobInfo()
-	if not charID then
-		for key, player in pairs(getElementsByType("player")) do
-			fetchJobInfoForOnePlayer(player)
-		end
+	for _, player in ipairs(getElementsByType("player")) do
+		fetchJobInfoForOnePlayer(player)
 	end
 end
 
@@ -115,12 +113,20 @@ function quitJob(source)
 		if job == 0 then
 			outputChatBox("You are currently unemployed.", source, 255, 0, 0)
 		else
-			local charID = getElementData(source, "dbid")
-			mysql:query_free("UPDATE `characters` SET `job` = 0 WHERE `id` = " .. tonumber(charID))
-			fetchJobInfoForOnePlayer(source)
+			local charID = tonumber(getElementData(source, "dbid"))
+			if not charID or charID < 1 or charID ~= math.floor(charID)
+				or not mysql:query_free("UPDATE `characters` SET `job` = 0 WHERE `id` = " .. charID)
+				or not fetchJobInfoForOnePlayer(source)
+				or tonumber(getElementData(source, "job")) ~= 0 then
+				outputChatBox("Your job could not be ended. Please try again later.", source, 255, 0, 0)
+				return false
+			end
 			if job == 4 then
-				exports.anticheat:changeProtectedElementDataEx(source, "tag", 1, false)
-				mysql:query_free("UPDATE characters SET tag=1 WHERE id = " .. mysql:escape_string(charID) )
+				if not mysql:query_free("UPDATE characters SET tag = 1 WHERE id = " .. charID) then
+					outputDebugString("[Job system] Failed to reset city maintenance tag for " .. getPlayerName(source), 1)
+				else
+					exports.anticheat:changeProtectedElementDataEx(source, "tag", 1, false)
+				end
 			end
 			triggerClientEvent(source, "quitJob", source, job)
 		end
