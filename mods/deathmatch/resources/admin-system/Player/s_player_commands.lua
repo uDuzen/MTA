@@ -43,7 +43,7 @@ function banPlayerSerial(thePlayer, theAdmin, reason, hide)
 			if row["serial"] == serial then
 				exports.global:sendMessageToAdmins("BAN-SYSTEM: Player " .. getPlayerName(thePlayer):gsub("_", " ") .. " is already banned. Kicking the player")
 				exports.global:sendMessageToAdmins("            Serial: " .. serial)
-				kickPlayer(thePlayer, reason)
+				kickPlayer(thePlayer, theAdmin, reason)
 				return
 			end
 		end
@@ -321,7 +321,7 @@ function forceApplication(thePlayer, commandName, targetPlayer, ...) -- Maxime
 					mysql:query_free("DELETE FROM `force_apps` WHERE `forceapp_date` < NOW() - interval 30 day ")
 					mysql:query_free("DELETE FROM `force_apps` WHERE `account`='" .. mysql:escape_string(id) .. "' ")
 					mysql:query_free("INSERT INTO `force_apps` SET `account`='" .. mysql:escape_string(id) .. "' ")
-					mysql:query_free("UPDATE `account_details` SET `appstate`='0' WHERE `account_id`='" .. id .. "' ")
+					mysql:query_free("UPDATE `account_details` SET `appstate`='0' WHERE `account_id`='" .. mysql:escape_string(tostring(id or "")) .. "' ")
 
 					local adminTitle = exports.global:getAdminTitle1(thePlayer)
 
