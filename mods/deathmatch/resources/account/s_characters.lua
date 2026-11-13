@@ -144,7 +144,7 @@ end
 addCommandHandler("loginto", adminLoginToPlayerCharacter, false, false)
 
 function spawnCharacter(characterID, remoteAccountID, theAdmin, targetAccountName, location, freshSpawn)
-    local player = theAdmin or (isElement(source) and getElementType(source) == "player" and source) or player
+    local player = theAdmin or (isElement(source) and getElementType(source) == "player" and source) or client
     if not isElement(player) or getElementType(player) ~= "player" then return false end
 
     characterID = tonumber(characterID)
