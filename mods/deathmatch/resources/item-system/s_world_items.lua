@@ -1065,6 +1065,14 @@ function pickupItem(object, leftammo)
 			giveAmount = leftAmount
 			remainingAmount = ammoAmount - leftAmount
 		end
+		local weaponSlot = getSlotFromWeapon(weaponID)
+		if not weaponSlot or weaponSlot < 1 then
+			exports.anticheat:setEld(object, "transfering", nil, "all")
+			return false
+		end
+		local previousWeapon = getPedWeapon(source, weaponSlot)
+		local previousTotal = tonumber(getPedTotalAmmo(source, weaponSlot)) or 0
+		local previousClip = tonumber(getPedAmmoInClip(source, weaponSlot)) or 0
 		if not giveWeapon(source, weaponID, giveAmount, true) then
 			exports.anticheat:setEld(object, "transfering", nil, "all")
 			return false
@@ -1079,8 +1087,26 @@ function pickupItem(object, leftammo)
 			querySucceeded = mysql:query_free("DELETE FROM worlditems WHERE id = " .. id .. " LIMIT 1")
 		end
 		if not querySucceeded then
-			if not takeWeapon(source, weaponID) then
-				outputDebugString("[item-system] Failed to reverse weapon grant after world-item update failure #" .. id, 1)
+			local currentWeapon = getPedWeapon(source, weaponSlot)
+			local restored = true
+			if previousWeapon and previousWeapon ~= 0 then
+				if currentWeapon ~= previousWeapon and currentWeapon and currentWeapon ~= 0 then
+					restored = takeWeapon(source, currentWeapon) and restored
+				end
+				if getPedWeapon(source, weaponSlot) ~= previousWeapon then
+					restored = giveWeapon(source, previousWeapon, previousTotal, true) and restored
+				end
+				if getPedWeapon(source, weaponSlot) == previousWeapon then
+					restored = setWeaponAmmo(source, previousWeapon, previousTotal, previousClip) and restored
+				end
+			else
+				if currentWeapon and currentWeapon ~= 0 then
+					restored = takeWeapon(source, currentWeapon)
+				end
+			end
+			if not restored then
+				outputDebugString("[item-system] Failed to restore weapon slot after world-item update failure #" .. id .. " for " .. getPlayerName(source), 1)
+				outputChatBox("Weapon rollback failed. Contact staff immediately.", source, 255, 0, 0)
 			end
 			exports.anticheat:setEld(object, "transfering", nil, "all")
 			return false
