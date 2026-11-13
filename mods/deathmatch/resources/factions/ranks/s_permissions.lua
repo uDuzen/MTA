@@ -33,6 +33,9 @@ function hasMemberPermissionTo(player, factionID, action)
 	local rankInfo = FactionRanks[rankID]
 	if type(rankInfo) ~= "table" then return false end
 	local perm = rankInfo["permissions"] or ""
+	if tonumber(rankInfo.isLeader) == 1 or perm == true or tostring(perm) == "*" then
+		return true
+	end
 	if perm ~= true then
 		local perProfile = split(tostring(perm), ",")
 		for _, value in ipairs(perProfile) do
