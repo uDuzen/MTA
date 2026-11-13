@@ -794,19 +794,18 @@ function makeGenericItemCargo(thePlayer, admin, genericType, price, quantity, na
 		created = created + 1
 	end
 	if created ~= quantity then
-		local rollbackSucceeded = true
-		for i = 1, created do
-			if not exports.global:takeItem(thePlayer, itemID, itemValue) then rollbackSucceeded = false end
-		end
-		if rollbackSucceeded then
-			if not exports.global:giveMoney(paymentTarget, price) then
-				outputChatBox("Creation failed and payment refund failed. Contact an administrator.", thePlayer, 255, 0, 0)
-			else
-				outputChatBox("Creation failed; created items were rolled back and payment refunded. Reason: " .. tostring(failureReason), thePlayer, 255, 0, 0)
-			end
+		-- Keep successfully created entries and charge only their proportional share.
+		-- Removing by itemID/value could delete an older generic with identical value.
+		local chargeForCreated = math.floor(price * created / quantity)
+		local refund = price - chargeForCreated
+		local refundSucceeded = refund == 0 or exports.global:giveMoney(paymentTarget, refund)
+		if refundSucceeded then
+			outputChatBox("Only " .. created .. " of " .. quantity .. " items could be created. $" .. exports.global:formatMoney(chargeForCreated) .. " was charged. Reason: " .. tostring(failureReason), thePlayer, 255, 0, 0)
 		else
-			outputChatBox("Creation was incomplete and inventory rollback failed. Payment retained; staff intervention required.", thePlayer, 255, 0, 0)
-			if exports.global.sendMessageToAdmins then exports.global:sendMessageToAdmins("[MAKEGENERIC] Inventory rollback failed for " .. getPlayerName(thePlayer) .. " (" .. created .. "/" .. quantity .. ").") end
+			outputChatBox("Only " .. created .. " of " .. quantity .. " items were created and the partial refund failed. Contact staff.", thePlayer, 255, 0, 0)
+			if exports.global.sendMessageToAdmins then
+				exports.global:sendMessageToAdmins("[MAKEGENERIC] Partial refund failed for " .. getPlayerName(thePlayer) .. " (" .. created .. "/" .. quantity .. ").")
+			end
 		end
 		triggerClientEvent(thePlayer, "item:updateclient", thePlayer)
 		return false
