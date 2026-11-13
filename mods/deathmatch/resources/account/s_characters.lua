@@ -18,6 +18,7 @@ function characterList( theClient )
     local clientAccountID = getElementDataEx(theClient, "account:id") or -1
 
     local result = mysql:query("SELECT skincolor,`id`, `charactername`, `cked`, TIMESTAMPDIFF(YEAR, `date_of_birth`, CURDATE()) AS `real_age`, `weight`, `height`, `description`, `gender`, `skin`, `clothingid`, `hoursplayed` FROM `characters` WHERE `account`='" .. mysql:escape_string(clientAccountID) .. "' AND `active` = 1 ORDER BY `cked` ASC, `lastlogin` DESC")
+    if not result then return characters end
     if (mysql:num_rows(result) > 0) then
         local i = 1
         while result do
@@ -55,9 +56,16 @@ function forumLogin(username, password)
     end
     local result, er = exports.integration:logintoForumAccount(username, password)
     if result then
-        setElementData(client, "account:forumid", result['member_id'])
-        mysql:query_free("UPDATE accounts SET forumid='"..result['member_id'].."' WHERE id='"..getElementData(client, 'account:id').."'")
-        --exports.integration:fetchForumInfo(result['member_id'], client)
+        local forumID = tonumber(result.member_id)
+        local accountID = tonumber(getElementData(client, "account:id"))
+        if not forumID or forumID < 1 or not accountID or accountID < 1 then
+            result = false
+            er = "Invalid forum or account identifier"
+        else
+            setElementData(client, "account:forumid", forumID)
+            mysql:query_free("UPDATE accounts SET forumid=" .. forumID .. " WHERE id=" .. accountID)
+            --exports.integration:fetchForumInfo(forumID, client)
+        end
     end
     triggerClientEvent(client, "forum:loginResult", resourceRoot, result, er)
 end
@@ -102,7 +110,7 @@ function adminLoginToPlayerCharacter(thePlayer, commandName, ...)
             outputChatBox("SYNTAX: /" .. commandName .. " [Exact Character Name]", thePlayer, 255, 194, 14, false)
             outputChatBox("Logs into player's character.", thePlayer, 255, 194, 0, false)
         else
-            targetChar = table.concat({...}, "_")
+            local targetChar = table.concat({...}, "_")
             local fetchData = mysql:query_fetch_assoc("SELECT `characters`.`id` AS `targetCharID` , `characters`.`account` AS `targetUserID` FROM `characters` WHERE `charactername`='"..mysql:escape_string(targetChar).."' LIMIT 1")
             if not fetchData then
                 outputChatBox("No character name found.", thePlayer, 255,0,0)
@@ -136,69 +144,59 @@ end
 addCommandHandler("loginto", adminLoginToPlayerCharacter, false, false)
 
 function spawnCharacter(characterID, remoteAccountID, theAdmin, targetAccountName, location, freshSpawn)
-    if theAdmin then
-        client = theAdmin
-    end
+    local player = theAdmin or (isElement(source) and getElementType(source) == "player" and source) or player
+    if not isElement(player) or getElementType(player) ~= "player" then return false end
 
-    if not client then
-        return false
-    end
-
-    if not characterID then
-        return false
-    end
-
-    if not tonumber(characterID) then
-        return false
-    end
     characterID = tonumber(characterID)
+    local accountID = theAdmin and tonumber(remoteAccountID) or tonumber(getElementDataEx(player, "account:id"))
+    if not characterID or characterID < 1 or characterID ~= math.floor(characterID)
+        or not accountID or accountID < 1 or accountID ~= math.floor(accountID) then
+        return false
+    end
 
-    triggerEvent('setDrunkness', client, 0)
-    setElementDataEx(client, "alcohollevel", 0, true)
+    triggerEvent('setDrunkness', player, 0)
+    setElementDataEx(player, "alcohollevel", 0, true)
 
-    removeMasksAndBadges(client)
+    removeMasksAndBadges(player)
 
-    setElementDataEx(client, "pd.jailserved")
-    setElementDataEx(client, "pd.jailtime")
-    setElementDataEx(client, "pd.jailtimer")
-    setElementDataEx(client, "pd.jailstation")
-    setElementDataEx(client, "loggedin", 0, true)
-    setElementData(client, "faction", {})
-    setElementData(client, "duty", 0)
+    setElementDataEx(player, "pd.jailserved")
+    setElementDataEx(player, "pd.jailtime")
+    setElementDataEx(player, "pd.jailtimer")
+    setElementDataEx(player, "pd.jailstation")
+    setElementDataEx(player, "loggedin", 0, true)
+    setElementData(player, "faction", {})
+    setElementData(player, "duty", 0)
 
-    local timer = getElementData(client, "pd.jailtimer")
+    local timer = getElementData(player, "pd.jailtimer")
     if isTimer(timer) then
         killTimer(timer)
     end
 
-    if (getPedOccupiedVehicle(client)) then
-        removePedFromVehicle(client)
+    if (getPedOccupiedVehicle(player)) then
+        removePedFromVehicle(player)
     end
     -- End cleaning up
-
-    local accountID = tonumber(getElementDataEx(client, "account:id"))
 
     local characterData = false
 
     if theAdmin then
-        accountID = remoteAccountID
         characterData = mysql:query_fetch_assoc("SELECT *, DAY(`date_of_birth`) AS dob_day, MONTH(`date_of_birth`) AS dob_month, YEAR(`date_of_birth`) AS dob_year, TIMESTAMPDIFF(YEAR, `date_of_birth`, NOW()) AS dob_age FROM `characters` LEFT JOIN `jobs` ON `characters`.`id` = `jobs`.`jobCharID` AND `characters`.`job` = `jobs`.`jobID` WHERE `id`='" .. tostring(characterID) .. "' AND `account`='" .. tostring(accountID) .. "'")
     else
         characterData = mysql:query_fetch_assoc("SELECT *, DAY(`date_of_birth`) AS dob_day, MONTH(`date_of_birth`) AS dob_month, YEAR(`date_of_birth`) AS dob_year, TIMESTAMPDIFF(YEAR, `date_of_birth`, NOW()) AS dob_age FROM `characters` LEFT JOIN `jobs` ON `characters`.`id` = `jobs`.`jobCharID` AND `characters`.`job` = `jobs`.`jobID` WHERE `id`='" .. tostring(characterID) .. "' AND `account`='" .. tostring(accountID) .. "' AND `cked`=0")
     end
 
     if characterData then
-        setElementDataEx(client, "look", fromJSON(characterData["description"]) or {"", "", "", "", characterData["description"], ""})
-        setElementDataEx(client, "weight", characterData["weight"])
-        setElementDataEx(client, "height", characterData["height"])
-        setElementDataEx(client, "race", tonumber(characterData["skincolor"]))
-        setElementDataEx(client, "maxvehicles", tonumber(characterData["maxvehicles"]))
-        setElementDataEx(client, "maxinteriors", tonumber(characterData["maxinteriors"]))
+        setElementDataEx(player, "look", fromJSON(characterData["description"]) or {"", "", "", "", characterData["description"], ""})
+        setElementDataEx(player, "weight", characterData["weight"])
+        setElementDataEx(player, "height", characterData["height"])
+        setElementDataEx(player, "race", tonumber(characterData["skincolor"]))
+        setElementDataEx(player, "maxvehicles", tonumber(characterData["maxvehicles"]))
+        setElementDataEx(player, "maxinteriors", tonumber(characterData["maxinteriors"]))
         --DATE OF BIRTH
-        setElementDataEx(client, "age", tonumber(characterData["dob_age"]))
-        setElementDataEx(client, "month", tonumber(characterData["dob_month"]))
-        setElementDataEx(client, "day", tonumber(characterData["dob_day"]))
-        setElementDataEx(client, "year", tonumber(characterData["dob_year"]))
+        setElementDataEx(player, "age", tonumber(characterData["dob_age"]))
+        setElementDataEx(player, "month", tonumber(characterData["dob_month"]))
+        setElementDataEx(player, "day", tonumber(characterData["dob_day"]))
+        setElementDataEx(player, "year", tonumber(characterData["dob_year"]))
 
         -- LANGUAGES
         local lang1 = tonumber(characterData["lang1"])
@@ -208,7 +206,7 @@ function spawnCharacter(characterID, remoteAccountID, theAdmin, targetAccountNam
         local lang3 = tonumber(characterData["lang3"])
         local lang3skill = tonumber(characterData["lang3skill"])
         local currentLanguage = tonumber(characterData["currlang"]) or 1
-        setElementDataEx(client, "languages.current", currentLanguage, false)
+        setElementDataEx(player, "languages.current", currentLanguage, false)
 
         if lang1 == 0 then
             lang1skill = 0
@@ -222,27 +220,27 @@ function spawnCharacter(characterID, remoteAccountID, theAdmin, targetAccountNam
             lang3skill = 0
         end
 
-        setElementDataEx(client, "languages.lang1", lang1, false)
-        setElementDataEx(client, "languages.lang1skill", lang1skill, false)
+        setElementDataEx(player, "languages.lang1", lang1, false)
+        setElementDataEx(player, "languages.lang1skill", lang1skill, false)
 
-        setElementDataEx(client, "languages.lang2", lang2, false)
-        setElementDataEx(client, "languages.lang2skill", lang2skill, false)
+        setElementDataEx(player, "languages.lang2", lang2, false)
+        setElementDataEx(player, "languages.lang2skill", lang2skill, false)
 
-        setElementDataEx(client, "languages.lang3", lang3, false)
-        setElementDataEx(client, "languages.lang3skill", lang3skill, false)
+        setElementDataEx(player, "languages.lang3", lang3, false)
+        setElementDataEx(player, "languages.lang3skill", lang3skill, false)
         -- END OF LANGUAGES
 
-        setElementDataEx(client, "timeinserver", tonumber(characterData["timeinserver"]), false)
-        setElementDataEx(client, "account:character:id", characterID, false)
-        setElementDataEx(client, "dbid", characterID, true) -- workaround
-        exports['item-system']:loadItems( client, true )
+        setElementDataEx(player, "timeinserver", tonumber(characterData["timeinserver"]), false)
+        setElementDataEx(player, "account:character:id", characterID, false)
+        setElementDataEx(player, "dbid", characterID, true) -- workaround
+        exports['item-system']:loadItems( player, true )
 
 
-        setElementDataEx(client, "loggedin", 1, true)
+        setElementDataEx(player, "loggedin", 1, true)
 
         -- Check his name isn't in use by a squatter
         local playerWithNick = getPlayerFromName(tostring(characterData["charactername"]))
-        if isElement(playerWithNick) and (playerWithNick~=client) then
+        if isElement(playerWithNick) and (playerWithNick~=player) then
             if theAdmin then
                 local adminTitle = exports.global:getPlayerAdminTitle(theAdmin)
                 local adminUsername = getElementData(theAdmin, "account:username")
@@ -253,20 +251,20 @@ function spawnCharacter(characterID, remoteAccountID, theAdmin, targetAccountNam
             end
         end
 
-        setElementDataEx(client, "bleeding", 0, false)
+        setElementDataEx(player, "bleeding", 0, false)
 
         -- Set their name to the characters
-        setElementDataEx(client, "legitnamechange", 1)
-        setPlayerName(client, tostring(characterData["charactername"]))
-        local pid = getElementData(client, "playerid")
+        setElementDataEx(player, "legitnamechange", 1)
+        setPlayerName(player, tostring(characterData["charactername"]))
+        local pid = getElementData(player, "playerid")
         local fixedName = string.gsub(tostring(characterData["charactername"]), "_", " ")
 
-        setElementDataEx(client, "legitnamechange", 0)
+        setElementDataEx(player, "legitnamechange", 0)
 
 
-        setPlayerNametagShowing(client, false)
-        setElementFrozen(client, true)
-        setPedGravity(client, 0)
+        setPlayerNametagShowing(player, false)
+        setElementFrozen(player, true)
+        setPedGravity(player, 0)
 
         local locationToSpawn = {}
         locationToSpawn.x = tonumber(characterData["x"])
@@ -275,14 +273,14 @@ function spawnCharacter(characterID, remoteAccountID, theAdmin, targetAccountNam
         locationToSpawn.rot = tonumber(characterData["rotation"])
         locationToSpawn.int = tonumber(characterData["interior_id"])
         locationToSpawn.dim = tonumber(characterData["dimension_id"])
-        spawnPlayer(client, locationToSpawn.x ,locationToSpawn.y ,locationToSpawn.z , locationToSpawn.rot, tonumber(characterData["skin"]))
-        setElementDimension(client, locationToSpawn.dim)
-        setElementInterior(client, locationToSpawn.int , locationToSpawn.x, locationToSpawn.y, locationToSpawn.z)
-        setCameraInterior(client, locationToSpawn.int)
+        spawnPlayer(player, locationToSpawn.x ,locationToSpawn.y ,locationToSpawn.z , locationToSpawn.rot, tonumber(characterData["skin"]))
+        setElementDimension(player, locationToSpawn.dim)
+        setElementInterior(player, locationToSpawn.int , locationToSpawn.x, locationToSpawn.y, locationToSpawn.z)
+        setCameraInterior(player, locationToSpawn.int)
 
 
-        setCameraTarget(client, client)
-        setPedArmor(client, tonumber(characterData["armor"]))
+        setCameraTarget(player, player)
+        setPedArmor(player, tonumber(characterData["armor"]))
 
         -- Handle all faction info
         local qh = dbQuery(mysql:getConn("mta"), "SELECT * FROM characters_faction WHERE character_id=? ORDER BY id ASC", tonumber(characterData["id"]))
@@ -296,7 +294,7 @@ function spawnCharacter(characterID, remoteAccountID, theAdmin, targetAccountNam
                 factionT[row.faction_id] = { rank = row.faction_rank, leader = row.faction_leader == 1 or false, phone = row.faction_phone, perks =  type(row.faction_perks) == "string" and fromJSON(row.faction_perks) or { }, count = count }
             end
             local duty = tonumber(characterData["duty"]) or 0
-            setElementData(client, "duty", duty)
+            setElementData(player, "duty", duty)
 
             -- check if the player has the duty package
             if duty > 0 then
@@ -311,168 +309,168 @@ function spawnCharacter(characterID, remoteAccountID, theAdmin, targetAccountNam
                 end
 
                 if not foundPackage then
-                    triggerEvent("duty:offduty", client)
-                    outputChatBox("You don't have access to the duty you are using anymore - thus, removed.", client, 255, 0, 0)
+                    triggerEvent("duty:offduty", player)
+                    outputChatBox("You don't have access to the duty you are using anymore - thus, removed.", player, 255, 0, 0)
                 end
             end
 
-            setElementData(client, "factionMenu", 0)
-            setElementData(client, "faction", factionT)
+            setElementData(player, "factionMenu", 0)
+            setElementData(player, "faction", factionT)
         else -- Aren't in any faction, just a citizen.
-            setElementData(client, "factionMenu", 0)
-            setElementData(client, "faction", { })
+            setElementData(player, "factionMenu", 0)
+            setElementData(player, "faction", { })
             dbFree(qh)
         end
 
         local team = getTeamFromName("Citizen") -- Needed for using team chat.
-        setPlayerTeam(client, team)
-        local adminLevel = getElementDataEx(client, "admin_level")
-        local gmLevel = getElementDataEx(client, "account:gmlevel")
-        exports.global:updateNametagColor(client)
+        setPlayerTeam(player, team)
+        local adminLevel = getElementDataEx(player, "admin_level")
+        local gmLevel = getElementDataEx(player, "account:gmlevel")
+        exports.global:updateNametagColor(player)
         -- ADMIN JAIL
-        local jailed = getElementData(client, "adminjailed")
-        local jailed_time = getElementData(client, "jailtime")
-        local jailed_by = getElementData(client, "jailadmin")
-        local jailed_reason = getElementData(client, "jailreason")
+        local jailed = getElementData(player, "adminjailed")
+        local jailed_time = getElementData(player, "jailtime")
+        local jailed_by = getElementData(player, "jailadmin")
+        local jailed_reason = getElementData(player, "jailreason")
 
         if location then
-            setElementPosition(client, location[1], location[2], location[3])
-            setElementRotation(client, 0, 0, location[4])
+            setElementPosition(player, location[1], location[2], location[3])
+            setElementRotation(player, 0, 0, location[4])
         end
 
         if jailed then
-            local incVal = getElementData(client, "playerid")
+            local incVal = getElementData(player, "playerid")
 
-            setElementDimension(client, 55000+incVal)
-            setElementInterior(client, 6)
-            setCameraInterior(client, 6)
-            setElementPosition(client, 263.821807, 77.848365, 1001.0390625)
-            setPedRotation(client, 267.438446)
+            setElementDimension(player, 55000+incVal)
+            setElementInterior(player, 6)
+            setCameraInterior(player, 6)
+            setElementPosition(player, 263.821807, 77.848365, 1001.0390625)
+            setPedRotation(player, 267.438446)
 
-            setElementDataEx(client, "jailserved", 0, false)
-            setElementDataEx(client, "adminjailed", true)
-            setElementDataEx(client, "jailreason", jailed_reason, false)
-            setElementDataEx(client, "jailadmin", jailed_by, false)
+            setElementDataEx(player, "jailserved", 0, false)
+            setElementDataEx(player, "adminjailed", true)
+            setElementDataEx(player, "jailreason", jailed_reason, false)
+            setElementDataEx(player, "jailadmin", jailed_by, false)
 
             if jailed_time ~= 999 then
-                if not getElementData(client, "jailtimer") then
-                    setElementDataEx(client, "jailtime", jailed_time+1, false)
-                    triggerEvent("admin:timerUnjailPlayer", client, client)
+                if not getElementData(player, "jailtimer") then
+                    setElementDataEx(player, "jailtime", jailed_time+1, false)
+                    triggerEvent("admin:timerUnjailPlayer", player, player)
                 end
             else
-                setElementDataEx(client, "jailtime", "Unlimited", false)
-                setElementDataEx(client, "jailtimer", true, false)
+                setElementDataEx(player, "jailtime", "Unlimited", false)
+                setElementDataEx(player, "jailtimer", true, false)
             end
-            setElementInterior(client, 6)
-            setCameraInterior(client, 6)
+            setElementInterior(player, 6)
+            setCameraInterior(player, 6)
         end
 
-        setElementDataEx(client, "legitnamechange", 0)
-        setElementDataEx(client, "muted", tonumber(muted))
-        setElementDataEx(client, "hoursplayed",  tonumber(characterData["hoursplayed"]), true)
-        setPlayerAnnounceValue ( client, "score", characterData["hoursplayed"] )
-        setElementDataEx(client, "alcohollevel", tonumber(characterData["alcohollevel"]) or 0, true)
-        exports.global:setMoney(client, tonumber(characterData["money"]), true)
-        exports.global:checkMoneyHacks(client)
+        setElementDataEx(player, "legitnamechange", 0)
+        setElementDataEx(player, "muted", tonumber(getElementData(player, "muted")) or 0)
+        setElementDataEx(player, "hoursplayed",  tonumber(characterData["hoursplayed"]), true)
+        setPlayerAnnounceValue ( player, "score", characterData["hoursplayed"] )
+        setElementDataEx(player, "alcohollevel", tonumber(characterData["alcohollevel"]) or 0, true)
+        exports.global:setMoney(player, tonumber(characterData["money"]), true)
+        exports.global:checkMoneyHacks(player)
 
-        setElementDataEx(client, "restrain", tonumber(characterData["cuffed"]), true)
-        setElementDataEx(client, "tazed", false, false)
-        setElementDataEx(client, "realinvehicle", 0, false)
+        setElementDataEx(player, "restrain", tonumber(characterData["cuffed"]), true)
+        setElementDataEx(player, "tazed", false, false)
+        setElementDataEx(player, "realinvehicle", 0, false)
 
         -- Job system - MAXIME
-        setElementData(client, "job", tonumber(characterData["job"]) or 0, true)
-        setElementData(client, "jobLevel", tonumber(characterData["jobLevel"]) or 0, true)
-        setElementData(client, "jobProgress", tonumber(characterData["jobProgress"]) or 0, true)
+        setElementData(player, "job", tonumber(characterData["job"]) or 0, true)
+        setElementData(player, "jobLevel", tonumber(characterData["jobLevel"]) or 0, true)
+        setElementData(player, "jobProgress", tonumber(characterData["jobProgress"]) or 0, true)
 
         -- MAXIME JOB SYSTEM
         if tonumber(characterData["job"]) == 1 then
             if characterData["jobTruckingRuns"] then
-                setElementData(client, "job-system-trucker:truckruns", tonumber(characterData["jobTruckingRuns"]), true)
+                setElementData(player, "job-system-trucker:truckruns", tonumber(characterData["jobTruckingRuns"]), true)
                 mysql:query_free("UPDATE `jobs` SET `jobTruckingRuns`='0' WHERE `jobCharID`='"..tostring(characterID).."' AND `jobID`='1' " )
             end
-            triggerClientEvent(client,"restoreTruckerJob",client)
+            triggerClientEvent(player,"restoreTruckerJob",player)
         end
-        triggerEvent("restoreJob", client)
-        triggerClientEvent(client, "updateCollectionValue", client, tonumber(characterData["photos"]))
+        triggerEvent("restoreJob", player)
+        triggerClientEvent(player, "updateCollectionValue", player, tonumber(characterData["photos"]))
         --------------------------------------------------------------------------
-        setElementDataEx(client, "license.car", tonumber(characterData["car_license"]), true)
-        setElementDataEx(client, "license.bike", tonumber(characterData["bike_license"]), true)
-        setElementDataEx(client, "license.boat", tonumber(characterData["boat_license"]), true)
-        setElementDataEx(client, "license.pilot", tonumber(characterData["pilot_license"]), true)
-        setElementDataEx(client, "license.fish", tonumber(characterData["fish_license"]), true)
-        setElementDataEx(client, "license.gun", tonumber(characterData["gun_license"]), true)
-        setElementDataEx(client, "license.gun2", tonumber(characterData["gun2_license"]), true)
+        setElementDataEx(player, "license.car", tonumber(characterData["car_license"]), true)
+        setElementDataEx(player, "license.bike", tonumber(characterData["bike_license"]), true)
+        setElementDataEx(player, "license.boat", tonumber(characterData["boat_license"]), true)
+        setElementDataEx(player, "license.pilot", tonumber(characterData["pilot_license"]), true)
+        setElementDataEx(player, "license.fish", tonumber(characterData["fish_license"]), true)
+        setElementDataEx(player, "license.gun", tonumber(characterData["gun_license"]), true)
+        setElementDataEx(player, "license.gun2", tonumber(characterData["gun2_license"]), true)
 
-        setElementDataEx(client, "bankmoney", tonumber(characterData["bankmoney"]), true)
-        setElementDataEx(client, "fingerprint", tostring(characterData["fingerprint"]), false)
-        setElementDataEx(client, "tag", tonumber(characterData["tag"]))
-        setElementDataEx(client, "blindfold", tonumber(characterData["blindfold"]), false)
-        setElementDataEx(client, "gender", tonumber(characterData["gender"]))
-        setElementDataEx(client, "deaglemode", 1, true) -- Default to lethal
-        setElementDataEx(client, "shotgunmode", 1, true) -- Default to lethal
-        setElementDataEx(client, "firemode", 0, true) -- Default to auto
-        setElementDataEx(client, "clothing:id", tonumber(characterData["clothingid"]) or nil, true)
+        setElementDataEx(player, "bankmoney", tonumber(characterData["bankmoney"]), true)
+        setElementDataEx(player, "fingerprint", tostring(characterData["fingerprint"]), false)
+        setElementDataEx(player, "tag", tonumber(characterData["tag"]))
+        setElementDataEx(player, "blindfold", tonumber(characterData["blindfold"]), false)
+        setElementDataEx(player, "gender", tonumber(characterData["gender"]))
+        setElementDataEx(player, "deaglemode", 1, true) -- Default to lethal
+        setElementDataEx(player, "shotgunmode", 1, true) -- Default to lethal
+        setElementDataEx(player, "firemode", 0, true) -- Default to auto
+        setElementDataEx(player, "clothing:id", tonumber(characterData["clothingid"]) or nil, true)
         
         if tonumber(characterData["pdjail"]) == 1 then -- PD JAIL Chaos New System
-            setElementData(client, "jailed", 1)
-            exports["prison-system"]:checkForRelease(client, true)
+            setElementData(player, "jailed", 1)
+            exports["prison-system"]:checkForRelease(player, true)
         end
 
         if (tonumber(characterData["restrainedobj"])>0) then
-            setElementDataEx(client, "restrainedObj", tonumber(characterData["restrainedobj"]), false)
+            setElementDataEx(player, "restrainedObj", tonumber(characterData["restrainedobj"]), false)
         end
 
         if ( tonumber(characterData["restrainedby"])>0) then
-            setElementDataEx(client, "restrainedBy",  tonumber(characterData["restrainedby"]), false)
+            setElementDataEx(player, "restrainedBy",  tonumber(characterData["restrainedby"]), false)
         end
 
         -- Cleaning their old weapons
-        takeAllWeapons(client)
+        takeAllWeapons(player)
 
-        if (getElementType(client) == 'player') then
-            triggerEvent("updateLocalGuns", client)
+        if (getElementType(player) == 'player') then
+            triggerEvent("updateLocalGuns", player)
         end
 
 
-        setPedStat(client, 70, 999)
-        setPedStat(client, 71, 999)
-        setPedStat(client, 72, 999)
-        setPedStat(client, 74, 999)
-        setPedStat(client, 76, 999)
-        setPedStat(client, 77, 999)
-        setPedStat(client, 78, 999)
-        setPedStat(client, 77, 999)
-        setPedStat(client, 78, 999)
-        setPedStat(client, 79, 999) -- Strafeing fix
+        setPedStat(player, 70, 999)
+        setPedStat(player, 71, 999)
+        setPedStat(player, 72, 999)
+        setPedStat(player, 74, 999)
+        setPedStat(player, 76, 999)
+        setPedStat(player, 77, 999)
+        setPedStat(player, 78, 999)
+        setPedStat(player, 77, 999)
+        setPedStat(player, 78, 999)
+        setPedStat(player, 79, 999) -- Strafeing fix
 
-        toggleAllControls(client, true, true, true)
-        setElementFrozen(client, false)
+        toggleAllControls(player, true, true, true)
+        setElementFrozen(player, false)
 
         -- Player is cuffed
         if (tonumber(characterData["cuffed"])==1) then
-            toggleControl(client, "sprint", false)
-            toggleControl(client, "fire", false)
-            toggleControl(client, "jump", false)
-            toggleControl(client, "next_weapon", false)
-            toggleControl(client, "previous_weapon", false)
-            toggleControl(client, "accelerate", false)
-            toggleControl(client, "brake_reverse", false)
-            toggleControl(client, "aim_weapon", false)
+            toggleControl(player, "sprint", false)
+            toggleControl(player, "fire", false)
+            toggleControl(player, "jump", false)
+            toggleControl(player, "next_weapon", false)
+            toggleControl(player, "previous_weapon", false)
+            toggleControl(player, "accelerate", false)
+            toggleControl(player, "brake_reverse", false)
+            toggleControl(player, "aim_weapon", false)
         end
 
         -- Impounded cars, old location
 
 
-        setPedFightingStyle(client, tonumber(characterData["fightstyle"]))
-        triggerEvent("onCharacterLogin", client, charname)
+        setPedFightingStyle(player, tonumber(characterData["fightstyle"]))
+        triggerEvent("onCharacterLogin", player, fixedName)
 
         if not location then
             location = { locationToSpawn.x, locationToSpawn.y, locationToSpawn.z, locationToSpawn.rot, locationToSpawn.int, locationToSpawn.dim }
         end
-        pendingSpawnLocations[client] = location
+        pendingSpawnLocations[player] = location
 
-        triggerClientEvent(client, "accounts:characters:spawn", client, fixedName, adminLevel, gmLevel, location)
-        triggerClientEvent(client, "item:updateclient", client)
+        triggerClientEvent(player, "accounts:characters:spawn", player, fixedName, adminLevel, gmLevel, location)
+        triggerClientEvent(player, "item:updateclient", player)
 
         if theAdmin then
             local adminTitle = exports.global:getPlayerAdminTitle(theAdmin)
@@ -484,52 +482,52 @@ function spawnCharacter(characterID, remoteAccountID, theAdmin, targetAccountNam
             end
         else
             mysql:query_free("UPDATE characters SET lastlogin=NOW() WHERE id='" .. mysql:escape_string(characterID) .. "'")
-            exports.logs:dbLog("ac"..tostring(accountID), 27, { "ac"..tostring(accountID), source } , "Spawned" )
-            local monitored = getElementData(client, "admin:monitor")
+            exports.logs:dbLog("ac"..tostring(accountID), 27, { "ac"..tostring(accountID), player } , "Spawned" )
+            local monitored = getElementData(player, "admin:monitor")
             if monitored then
                 if monitored ~= "New Player" then
-                    exports.global:sendMessageToAdmins("[MONITOR] ".. getPlayerName(client):gsub("_", " ") .." ("..pid.."): "..monitored)
-                    exports.global:sendMessageToSupporters("[MONITOR] ".. getPlayerName(client):gsub("_", " ") .." ("..pid.."): "..monitored)
+                    exports.global:sendMessageToAdmins("[MONITOR] ".. getPlayerName(player):gsub("_", " ") .." ("..pid.."): "..monitored)
+                    exports.global:sendMessageToSupporters("[MONITOR] ".. getPlayerName(player):gsub("_", " ") .." ("..pid.."): "..monitored)
                 end
             end
         end
 
-        setTimer(setPedGravity, 2000, 1, client, 0.008)
-        setElementAlpha(client, 255)
+        setTimer(setPedGravity, 2000, 1, player, 0.008)
+        setElementAlpha(player, 255)
 
         -- WALKING STYLE
-        triggerEvent("realism:applyWalkingStyle", client, characterData["walkingstyle"] or 128, true)
+        triggerEvent("realism:applyWalkingStyle", player, characterData["walkingstyle"] or 128, true)
 
         -- blindfolds
         if (tonumber(characterData["blindfold"])==1) then
-            setElementDataEx(client, "blindfold", 1)
-            outputChatBox("Your character is blindfolded. If this was an OOC action, please contact an administrator via F2.", client, 255, 194, 15)
-            fadeCamera(client, false)
+            setElementDataEx(player, "blindfold", 1)
+            outputChatBox("Your character is blindfolded. If this was an OOC action, please contact an administrator via F2.", player, 255, 194, 15)
+            fadeCamera(player, false)
         else
-            fadeCamera(client, true, 4)
+            fadeCamera(player, true, 4)
         end
 
         if (tonumber(characterData["cuffed"])==1) then
-            outputChatBox("Your character is restrained.", client, 255, 0, 0)
+            outputChatBox("Your character is restrained.", player, 255, 0, 0)
         end
 
-        setElementHealth(client, tonumber(characterData["health"]))
+        setElementHealth(player, tonumber(characterData["health"]))
 
         --character settings / MAXIME
-        loadCharacterSettings(client,characterID)
-        setTimer(executeCommandHandler, 3000, 1, "stats", client)
-        triggerClientEvent(client, "drawAllMyInteriorBlips", client)
+        loadCharacterSettings(player,characterID)
+        setTimer(executeCommandHandler, 3000, 1, "stats", player)
+        triggerClientEvent(player, "drawAllMyInteriorBlips", player)
 
         --MOTD / MAXIME /2015.1.9
-        triggerEvent("playerGetMotds", client)
+        triggerEvent("playerGetMotds", player)
 
-        triggerEvent("item-system:addPlayerArtifacts", client)
+        triggerEvent("item-system:addPlayerArtifacts", player)
 
-        triggerEvent( "account:character:spawned", client ) -- have an event that we can call when a character is spawned.
-        triggerClientEvent( client, "account:character:spawned", client ) -- have an event that we can call when a character is spawned.
+        triggerEvent( "account:character:spawned", player ) -- have an event that we can call when a character is spawned.
+        triggerClientEvent( player, "account:character:spawned", player ) -- have an event that we can call when a character is spawned.
         --outputDebugString('account:character:spawned')
         if freshSpawn then
-            triggerEvent( "social:look", client, client, ":edit" )
+            triggerEvent( "social:look", player, player, ":edit" )
         end
     end
 end
