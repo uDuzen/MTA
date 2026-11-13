@@ -46,90 +46,109 @@ function isAnyOneElseAround(theAtm)
 end
 
 function updateBankMoney(thePlayer, charID, money, transfer)
-	if not charID or not tonumber(charID) or not money or not tonumber(money) then
+	charID, money = tonumber(charID), tonumber(money)
+	if not charID or charID ~= charID or charID == math.huge or charID == -math.huge
+		or charID == 0 or charID ~= math.floor(charID)
+		or not money or money ~= money or money == math.huge or money == -math.huge
+		or money < 0 or money > 1000000000 or money ~= math.floor(money) then
 		return false
-	else
-		charID = tonumber(charID)
-		money = math.abs(money)
 	end
 
-	if charID < 0 then -- faction id
-		local factionId = -charID
-		local foundFaction = nil
-		--outputDebugString(factionId)
-		for _, faction in pairs(getElementsByType("team")) do
-			--outputDebugString(tonumber(getElementData(faction, "id")) )
-			if factionId == tonumber(getElementData(faction, "id")) then
+	if charID < 0 then
+		local factionID = -charID
+		local foundFaction
+		for _, faction in ipairs(getElementsByType("team")) do
+			if tonumber(getElementData(faction, "id")) == factionID then
 				foundFaction = faction
 				break
 			end
 		end
-
-		if not foundFaction then 
-			outputDebugString ("bank / atm / didn't find the faction from id ")
+		if not isElement(foundFaction) then
+			outputDebugString("[BANK] updateBankMoney could not find faction #" .. factionID, 1)
 			return false
 		end
-
-		if not transfer then
-			return exports.global:setMoney(foundFaction, money)
-		else
-			if transfer == "minus" then
-				return exports.global:takeMoney(foundFaction, money)
-			elseif transfer == "plus" then
-				return exports.global:giveMoney(foundFaction, money)
-			else
-				return false
-			end
+		if transfer == nil then
+			return exports.global:setMoney(foundFaction, money) == true
+		elseif transfer == "minus" then
+			return exports.global:takeMoney(foundFaction, money) == true
+		elseif transfer == "plus" then
+			return exports.global:giveMoney(foundFaction, money) == true
 		end
+		return false
+	end
+
+	if transfer ~= nil and transfer ~= "minus" and transfer ~= "plus" then return false end
+	local row = mysql:query_fetch_assoc("SELECT bankmoney FROM characters WHERE id = " .. charID .. " LIMIT 1")
+	local oldBalance = row and tonumber(row.bankmoney)
+	if not oldBalance or oldBalance < 0 or oldBalance ~= oldBalance
+		or oldBalance == math.huge or oldBalance == -math.huge then
+		return false
+	end
+
+	local newBalance
+	if transfer == "minus" then
+		if oldBalance < money then return false end
+		newBalance = oldBalance - money
+	elseif transfer == "plus" then
+		newBalance = oldBalance + money
 	else
-		if not transfer then
-			for _, player in pairs(getElementsByType("player")) do
-				if tonumber(charID) == tonumber(getElementData(player, "dbid")) then
-					setElementDataEx(player, "bankmoney", tonumber(money) or 0, true)
-				end
-			end
-			
-			--UPDATE TO SQL
-			if not mysql:query_free("UPDATE `characters` SET `bankmoney`='"..money.."' WHERE `id`='"..charID.."' ") then
-				outputDebugString("[BANK] Failed to update bankmoney to SQL!")
-				return false
-			end
-			return true
-		else
-			if transfer == "minus" then
-				for _, player in pairs(getElementsByType("player")) do
-					if tonumber(charID) == tonumber(getElementData(player, "dbid")) then
-						local current = getElementData(player, "bankmoney")
-						if tonumber(money) > current then
-							return false
-						end
-						setElementDataEx(player, "bankmoney", current-tonumber(money), true)
-					end
-				end
-				--UPDATE TO SQL
-				if not mysql:query_free("UPDATE `characters` SET `bankmoney`=bankmoney-"..money.." WHERE `id`='"..charID.."' ") then
-					outputDebugString("[BANK] Failed to update bankmoney to SQL!")
-					return false
-				end
-				return true
-			elseif transfer == "plus" then
-				for _, player in pairs(getElementsByType("player")) do
-					if tonumber(charID) == tonumber(getElementData(player, "dbid")) then
-						setElementDataEx(player, "bankmoney", getElementData(player, "bankmoney")+tonumber(money), true)
-					end
-				end
-				--UPDATE TO SQL
-				if not mysql:query_free("UPDATE `characters` SET `bankmoney`=bankmoney+"..money.." WHERE `id`='"..charID.."' ") then
-					outputDebugString("[BANK] Failed to update bankmoney to SQL!")
-					return false
-				end
-				return true
-			else
-				outputDebugString("Error in g_atm_functions.lua / line 70++")
-				return false
-			end
+		newBalance = money
+	end
+	if newBalance < 0 or newBalance > 2000000000 then return false end
+
+	local updated
+	if transfer == "minus" then
+		updated = mysql:query_free("UPDATE characters SET bankmoney = bankmoney - " .. money
+			.. " WHERE id = " .. charID .. " AND bankmoney = " .. oldBalance)
+	elseif transfer == "plus" then
+		updated = mysql:query_free("UPDATE characters SET bankmoney = bankmoney + " .. money
+			.. " WHERE id = " .. charID .. " AND bankmoney = " .. oldBalance)
+	else
+		updated = mysql:query_free("UPDATE characters SET bankmoney = " .. newBalance
+			.. " WHERE id = " .. charID .. " AND bankmoney = " .. oldBalance)
+	end
+	if not updated then
+		outputDebugString("[BANK] Failed to update bankmoney in SQL for character #" .. charID, 1)
+		return false
+	end
+
+	local savedRow = mysql:query_fetch_assoc("SELECT bankmoney FROM characters WHERE id = " .. charID .. " LIMIT 1")
+	if not savedRow or tonumber(savedRow.bankmoney) ~= newBalance then
+		local rolledBack = mysql:query_free("UPDATE characters SET bankmoney = " .. oldBalance
+			.. " WHERE id = " .. charID .. " AND bankmoney = " .. newBalance)
+		if not rolledBack then
+			outputDebugString("[BANK] Failed to roll back unverified bankmoney update for character #" .. charID, 1)
+		end
+		return false
+	end
+
+	local onlinePlayers = {}
+	for _, player in ipairs(getElementsByType("player")) do
+		if tonumber(getElementData(player, "dbid")) == charID then
+			onlinePlayers[#onlinePlayers + 1] = {
+				player = player,
+				old = tonumber(getElementData(player, "bankmoney")) or oldBalance
+			}
 		end
 	end
+	local changed = {}
+	for _, entry in ipairs(onlinePlayers) do
+		if not setElementDataEx(entry.player, "bankmoney", newBalance, true) then
+			local rollbackOK = mysql:query_free("UPDATE characters SET bankmoney = " .. oldBalance
+				.. " WHERE id = " .. charID .. " AND bankmoney = " .. newBalance)
+			for _, changedEntry in ipairs(changed) do
+				if isElement(changedEntry.player) then
+					setElementDataEx(changedEntry.player, "bankmoney", changedEntry.old, true)
+				end
+			end
+			if not rollbackOK then
+				outputDebugString("[BANK] Failed to roll back bankmoney database value after element-data update failed for #" .. charID, 1)
+			end
+			return false
+		end
+		table.insert(changed, entry)
+	end
+	return true
 end
 
 function toSQL(text)
