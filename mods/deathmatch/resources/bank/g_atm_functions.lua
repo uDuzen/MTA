@@ -213,11 +213,9 @@ function saveBank(thePlayer)
 		or bankBalance < 0 or bankBalance ~= math.floor(bankBalance) then
 		return false
 	end
-	if not mysql:query_free("UPDATE characters SET bankmoney = " .. bankBalance .. " WHERE id = " .. characterID) then
-		return false
-	end
-	local saved = mysql:query_fetch_assoc("SELECT bankmoney FROM characters WHERE id = " .. characterID .. " LIMIT 1")
-	return saved and tonumber(saved.bankmoney) == bankBalance or false
+	local exists = mysql:query_fetch_assoc("SELECT id FROM characters WHERE id = " .. characterID .. " LIMIT 1")
+	if not exists then return false end
+	return mysql:query_free("UPDATE characters SET bankmoney = " .. bankBalance .. " WHERE id = " .. characterID)
 end
 
 function explode(div,str) -- credit: http://richard.warburton.it
