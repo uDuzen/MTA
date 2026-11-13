@@ -617,6 +617,7 @@ function givePlayerItem(thePlayer, commandName, targetPlayer, itemID, ...)
 				return false
 			end
 			local itemValue = table.concat({...}, " ")
+                if #itemValue > 1024 then outputChatBox("Item value is too long.", thePlayer, 255, 0, 0); return false end
 			itemValue = tonumber(itemValue) or itemValue
 
 			-- skins
@@ -835,7 +836,7 @@ function takePlayerItem(thePlayer, commandName, targetPlayer, itemID, ...)
                 local logged = tonumber(getElementData(targetPlayer, "loggedin"))
                 local itemValue = table.concat({...}, " ")
                 itemID = tonumber(itemID)
-                if not itemID or itemID < 1 or itemID ~= math.floor(itemID) then
+                if not itemID or itemID == 0 or itemID < -100 or itemID > 1000 or itemID ~= math.floor(itemID) then
                     outputChatBox("Invalid item ID.", thePlayer, 255, 0, 0)
                     return false
                 end
@@ -875,8 +876,16 @@ function takePlayerItem(thePlayer, commandName, targetPlayer, itemID, ...)
                             end
                             local given = exports.global:giveItem(thePlayer, itemID, itemValue, itemMetadata)
                             if not given then
-                                exports.global:giveItem(targetPlayer, itemID, itemValue, itemMetadata)
-                                outputChatBox("Transfer failed; the item was returned to the target.", thePlayer, 255, 0, 0)
+                                local restored = exports.global:giveItem(targetPlayer, itemID, itemValue, itemMetadata)
+                                if restored then
+                                    outputChatBox("Transfer failed; the item was returned to the target.", thePlayer, 255, 0, 0)
+                                else
+                                    outputChatBox("Transfer and rollback both failed. Contact staff immediately.", thePlayer, 255, 0, 0)
+                                    outputDebugString("[admin-system] Failed to restore item after takeitem rollback for " .. getPlayerName(targetPlayer), 1)
+                                    if exports.global.sendMessageToAdmins then
+                                        exports.global:sendMessageToAdmins("[TAKEITEM] Rollback failed for " .. getPlayerName(targetPlayer) .. " item " .. itemID .. ".")
+                                    end
+                                end
                                 triggerClientEvent(targetPlayer, "item:updateclient", targetPlayer)
                                 return false
                             end
