@@ -473,7 +473,7 @@ function updateItemValue(element, slot, itemValue)
 			if itemValue then
 				local itemIndex = tonumber(saveditems[element][slot][3])
 				local elementType, elementID = getType(element), tonumber(getID(element))
-				if not itemIndex or itemIndex < 1 or itemType == 255 or not elementID or elementID < 0 then
+				if not itemIndex or itemIndex < 1 or elementType == 255 or not elementID or elementID < 0 then
 					return false, "Invalid inventory owner or item index"
 				end
 				if client and (client ~= element or getElementType(client) ~= "player"
