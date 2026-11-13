@@ -140,6 +140,11 @@ local function moveToElement(element, slot, ammo, event)
 	local elementItemID = getElementData(element, "itemID")
 
 	if not ammo then
+		local inventoryLoaded = loadItems(source)
+		if not inventoryLoaded then
+			triggerClientEvent(source, event or "finishItemMove", source)
+			return false
+		end
 		local sourceItems = getItems(source)
 		if type(sourceItems) ~= "table" then
 			triggerClientEvent(source, event or "finishItemMove", source)
@@ -518,6 +523,10 @@ local function moveWorldItemToElement( item, element )
 
 	if itemID == 134 and getElementType(element) == "player" then
 		local amount = tonumber(itemValue)
+		if not loadItems(item) then
+			finishMove()
+			return false
+		end
 		local contents = getItems(item)
 		if not amount or amount ~= amount or amount == math.huge or amount <= 0
 			or type(contents) ~= "table" or #contents > 0 then
@@ -564,6 +573,15 @@ local function moveWorldItemToElement( item, element )
 			end
 		end
 
+		local targetLoaded = loadItems(element)
+		local worldLoaded = loadItems(item)
+		if not targetLoaded or not worldLoaded then
+			local existingItems = targetLoaded and getItems(element) or nil
+			local shellSlot = type(existingItems) == "table" and #existingItems or nil
+			if shellSlot then takeItemFromSlot(element, shellSlot) end
+			finishMove()
+			return false
+		end
 		local targetItems = getItems(element)
 		local worldItems = getItems(item)
 		if type(targetItems) ~= "table" or type(worldItems) ~= "table" then
@@ -579,6 +597,10 @@ local function moveWorldItemToElement( item, element )
 			if not moved then
 				transferComplete = false
 				outputDebugString("[item-system] World item content transfer stopped: " .. tostring(moveError), 2)
+				break
+			end
+			if not loadItems(item) then
+				transferComplete = false
 				break
 			end
 			worldItems = getItems(item)
@@ -636,6 +658,10 @@ local function moveFromElement(element, slot, ammo, index)
 	end
 
 	if not canAccessElement(source, element) then
+		finishMove()
+		return false
+	end
+	if not loadItems(element) then
 		finishMove()
 		return false
 	end
