@@ -730,83 +730,84 @@ local allowedFactions = {
 }
 	
 function makeGenericItemCargo(thePlayer, admin, genericType, price, quantity, name, model, scale, texURL, texName)
-	if not isElement(thePlayer) or getElementType(thePlayer) ~= "player" then return false end
-	admin = exports.integration:isPlayerAdmin(thePlayer)
-	genericType = tonumber(genericType)
-	price = tonumber(price)
-	quantity = tonumber(quantity)
-	model = tonumber(model)
+	if not isElement(thePlayer) or getElementType(thePlayer) ~= "player" or getElementData(thePlayer, "loggedin") ~= 1 then return false end
+	-- The admin flag is client-controlled; always derive it on the server.
+	admin = exports.integration:isPlayerAdmin(thePlayer) == true
+	genericType, price, quantity, model = tonumber(genericType), tonumber(price), tonumber(quantity), tonumber(model)
 	scale = tonumber(scale) or 1
 	if not genericType or genericType < 1 or genericType > 3 or genericType ~= math.floor(genericType)
 		or not price or price < 0 or price > 1000000 or price ~= math.floor(price)
 		or not quantity or quantity < 1 or quantity > 20 or quantity ~= math.floor(quantity)
 		or type(name) ~= "string" or #name < 1 or #name > 64
 		or not model or model < 1 or model > 20000 or model ~= math.floor(model)
-		or scale ~= scale or scale < 0.1 or scale > 10 then
-		return false
-	end
+		or scale ~= scale or scale < 0.1 or scale > 10 then return false end
 	if texURL ~= nil and (type(texURL) ~= "string" or #texURL > 512) then return false end
 	if texName ~= nil and (type(texName) ~= "string" or #texName > 64) then return false end
-	local itemID = (genericType == 1 and 80) or (genericType == 2 and 89) or (genericType == 3 and 95) or false
-	
-	-- faction checks
-	local factionID, isLeader = false, false
+	name = name:gsub("[%c]", "")
+	if #name < 1 then return false end
+	local itemID = (genericType == 1 and 80) or (genericType == 2 and 89) or 95
+	local factionID, factionElement = false, false
 	if not admin then
 		factionID = exports.factions:getCurrentFactionDuty(thePlayer) or 0
-		if (not allowedFactions[factionID]) or (not allowedFactions[factionID][tostring(itemID)]) then
+		if not allowedFactions[factionID] or not allowedFactions[factionID][tostring(itemID)] then
 			outputChatBox("You need to be on faction duty of a faction with the generic spawning perk.", thePlayer, 255, 0, 0)
 			return false
 		end
-		isLeader = exports.factions:hasMemberPermissionTo(thePlayer, factionID, "add_member")
-		if (not isLeader) then
+		if not exports.factions:hasMemberPermissionTo(thePlayer, factionID, "add_member") then
 			outputChatBox("Only faction leaders may spawn generics.", thePlayer, 255, 0, 0)
 			return false
 		end
-	end
-	-- end checks
-	
-	if getElementData(thePlayer, "loggedin") == 1 then
-		local fPrice = exports.global:formatMoney(price)
-		if not exports.global:takeMoney((factionID and exports.factions:getFactionFromID(factionID)) or thePlayer, price) then
-			outputChatBox("You" .. (factionID and "r faction" or "") .. " could not afford $" .. fPrice .. " for a '" .. name .. "'.", thePlayer, 255, 0, 0)
+		factionElement = exports.factions:getFactionFromID(factionID)
+		if not isElement(factionElement) then
+			outputChatBox("The faction account could not be found.", thePlayer, 255, 0, 0)
 			return false
 		end
-
-		local playerName = exports.global:getPlayerName(thePlayer)
-		
-		if not admin then
-			exports.bank:addBankTransactionLog((factionID and -factionID) or getElementData(thePlayer, "account:character:id"), 0, price, 15, "Chuckup order (" .. playerName .. ")")
-		end
-		
-		local metadata = { ['item_name'] = name, ['model'] = model, ['scale'] = scale or 1 }
-
-		if texURL and texName then
-			metadata['url'] = texURL
-			metadata['texture'] = texName
-		end
-
-		for k, v in pairs(metadata) do --fix for unwanted linebreaks
-			if type(v) == "string" then
-				metadata[k] = v:gsub("\n", "")
-			end
-		end
-
-		for i = 1, tonumber(quantity) do
-			local success, reason = (genericType == 1 and exports.global:giveItem(thePlayer, itemID, "1", metadata)) or exports.global:giveItem(thePlayer, itemID, name .. ":" .. model)
-			if not success then
-				outputChatBox("Failed to create some generic items. Proccess stopped short on item ".. tostring(i) .. "/" .. quantity .. ".", thePlayer, 255, 0, 0)
-				outputChatBox("Reason: " .. reason, thePlayer, 255, 0, 0)
-				break
-			end
-		end
-
-		outputChatBox("[MAKEGENERIC] You've created " .. quantity .. "x " .. name .. " for $" .. exports.global:formatMoney(price) .. ".", thePlayer, 100, 255, 100)
-		exports.global:sendWrnToStaffOnDuty(playerName.." has created (".. quantity ..") '"..name.."' to themselves for $"..fPrice..".", (admin and "ADMIN" or exports.factions:getFactionName(factionID)))
-		exports.logs:dbLog(thePlayer, 4, thePlayer, (admin and "ADMIN" or exports.factions:getFactionName(factionID)) .. " makegeneric " .. name .. " (x" .. quantity .. ") for " .. fPrice)
-		triggerClientEvent(thePlayer, "item:updateclient", thePlayer)
-
-		return true
 	end
+	local paymentTarget = factionElement or thePlayer
+	local fPrice = exports.global:formatMoney(price)
+	if not exports.global:takeMoney(paymentTarget, price) then
+		outputChatBox("You" .. (factionID and "r faction" or "") .. " could not afford $" .. fPrice .. " for a '" .. name .. "'.", thePlayer, 255, 0, 0)
+		return false
+	end
+	local metadata = { item_name = name, model = model, scale = scale }
+	if texURL and texName then metadata.url, metadata.texture = texURL, texName end
+	local itemValue = (genericType == 1) and "1" or (name .. ":" .. model)
+	local created, failureReason = 0, nil
+	for i = 1, quantity do
+		local success, reason
+		if genericType == 1 then
+			success, reason = exports.global:giveItem(thePlayer, itemID, itemValue, metadata)
+		else
+			success, reason = exports.global:giveItem(thePlayer, itemID, itemValue)
+		end
+		if not success then failureReason = tostring(reason or "Unknown inventory error"); break end
+		created = created + 1
+	end
+	if created ~= quantity then
+		local rollbackSucceeded = true
+		for i = 1, created do
+			if not exports.global:takeItem(thePlayer, itemID, itemValue) then rollbackSucceeded = false end
+		end
+		if rollbackSucceeded then
+			if not exports.global:giveMoney(paymentTarget, price) then
+				outputChatBox("Creation failed and payment refund failed. Contact an administrator.", thePlayer, 255, 0, 0)
+			else
+				outputChatBox("Creation failed; created items were rolled back and payment refunded. Reason: " .. tostring(failureReason), thePlayer, 255, 0, 0)
+			end
+		else
+			outputChatBox("Creation was incomplete and inventory rollback failed. Payment retained; staff intervention required.", thePlayer, 255, 0, 0)
+			if exports.global.sendMessageToAdmins then exports.global:sendMessageToAdmins("[MAKEGENERIC] Inventory rollback failed for " .. getPlayerName(thePlayer) .. " (" .. created .. "/" .. quantity .. ").") end
+		end
+		triggerClientEvent(thePlayer, "item:updateclient", thePlayer)
+		return false
+	end
+	local playerName = exports.global:getPlayerName(thePlayer)
+	if not admin then exports.bank:addBankTransactionLog(-factionID, 0, price, 15, "Chuckup order (" .. playerName .. ")") end
+	outputChatBox("[MAKEGENERIC] You've created " .. created .. "x " .. name .. " for $" .. fPrice .. ".", thePlayer, 100, 255, 100)
+	exports.global:sendWrnToStaffOnDuty(playerName .. " has created (" .. created .. ") '" .. name .. "' for $" .. fPrice .. ".", (admin and "ADMIN" or exports.factions:getFactionName(factionID)))
+	exports.logs:dbLog(thePlayer, 4, thePlayer, (admin and "ADMIN" or exports.factions:getFactionName(factionID)) .. " makegeneric " .. name .. " (x" .. created .. ") for " .. fPrice)
+	triggerClientEvent(thePlayer, "item:updateclient", thePlayer)
+	return true
 end
 addEvent("createCargoGeneric", true)
 addEventHandler("createCargoGeneric", getResourceRootElement(), function(_, admin, genericType, price, quantity, name, model, scale, texURL, texName)
@@ -834,9 +835,13 @@ function takePlayerItem(thePlayer, commandName, targetPlayer, itemID, ...)
                 elseif (logged==1) then
                     if exports.global:hasItem(targetPlayer, itemID, itemValue) then
                         if (commandName == "delplayeritem") then
-                            outputChatBox("You deleted item " .. displayItemName .. " with the value of (" .. itemValue .. ") from " .. targetPlayerName .. "'s inventory.", thePlayer, 0, 255, 0)
-                            exports.global:takeItem(targetPlayer, itemID, itemValue)
-                            exports.logs:dbLog(thePlayer, 4, targetPlayer, "DELPLAYERITEM "..tostring(itemID).." "..tostring(itemValue))
+                            local removed = exports.global:takeItem(targetPlayer, itemID, itemValue)
+                            if not removed then
+                                outputChatBox("The item could not be removed from the target's inventory.", thePlayer, 255, 0, 0)
+                                return false
+                            end
+                            outputChatBox("You deleted item " .. tostring(displayItemName) .. " with the value of (" .. tostring(itemValue) .. ") from " .. targetPlayerName .. "'s inventory.", thePlayer, 0, 255, 0)
+                            exports.logs:dbLog(thePlayer, 4, targetPlayer, "DELPLAYERITEM " .. tostring(itemID) .. " " .. tostring(itemValue))
                             triggerClientEvent(targetPlayer, "item:updateclient", targetPlayer)
                         elseif (commandName == "takeitem") then
                             local removed = exports.global:takeItem(targetPlayer, itemID, itemValue)
@@ -876,15 +881,16 @@ addCommandHandler("delplayeritem", takePlayerItem, false, false)
 -- /SETHP
 function setPlayerHealth(thePlayer, commandName, targetPlayer, health)
 	if (exports.integration:isPlayerTrialAdmin(thePlayer) or exports.integration:isPlayerScripter(thePlayer)) then
-		if not tonumber(health) or not (targetPlayer) then
+		local healthValue = tonumber(health)
+		if not healthValue or healthValue ~= healthValue or healthValue < 0 or healthValue > 200 or not targetPlayer then
 			outputChatBox("SYNTAX: /" .. commandName .. " [Player Partial Nick / ID] [Health]", thePlayer, 255, 194, 14)
 		else
 			local targetPlayer, targetPlayerName = exports.global:findPlayerByPartialNick(thePlayer, targetPlayer)
 
 			if targetPlayer then
-				if tonumber( health ) < getElementHealth( targetPlayer ) and getElementData( thePlayer, "admin_level" ) < getElementData( targetPlayer, "admin_level" ) then
+				if healthValue < getElementHealth(targetPlayer) and (tonumber(getElementData(thePlayer, "admin_level")) or 0) < (tonumber(getElementData(targetPlayer, "admin_level")) or 0) then
 					outputChatBox("Nah.", thePlayer, 255, 0, 0)
-				elseif not setElementHealth(targetPlayer, tonumber(health)) then
+				elseif not setElementHealth(targetPlayer, healthValue) then
 					outputChatBox("Invalid health value.", thePlayer, 255, 0, 0)
 				else
 					--mysql:query_free("UPDATE characters SET health=0 WHERE id="..getElementData(targetPlayer, 'dbid'))
