@@ -34,44 +34,39 @@ function banPlayerSerial(thePlayer, theAdmin, reason, hide)
 		return false
 	end
 	local serial = getPlayerSerial(thePlayer)
-	reason = tostring(reason or "No reason specified"):sub(1, 255)
-	local result = mysql:query("SELECT * FROM bannedSerials")
-	if result then
-		while true do
-			local row = mysql:fetch_assoc(result)
-			if not row then break end
-			if row["serial"] == serial then
-				exports.global:sendMessageToAdmins("BAN-SYSTEM: Player " .. getPlayerName(thePlayer):gsub("_", " ") .. " is already banned. Kicking the player")
-				exports.global:sendMessageToAdmins("            Serial: " .. serial)
-				kickPlayer(thePlayer, theAdmin, reason)
-				return
-			end
-		end
-	end
-	local entry = mysql:query_free('INSERT INTO bannedSerials (serial) VALUES ("' .. mysql:escape_string(serial) .. '")' )
-	if entry then
-		if not hide then
-			for key, value in ipairs(getElementsByType("player")) do
-				if tonumber( getElementData( value, "punishment_notification_selector") ) ~= 1 or value == thePlayer or value == theAdmin then
-					outputChatBox(exports.global:getPlayerAdminTitle(theAdmin) .. " " .. getPlayerName(theAdmin):gsub("_"," ") .. " banned player " .. getPlayerName(thePlayer):gsub("_"," "), value, 255, 0, 0)
-					outputChatBox("Reason: " .. reason, value, 255, 0, 0)
-				end
-			end
-		else
-			outputChatBox("You have banned " .. getPlayerName(thePlayer):gsub("_"," ") .. " silently.", theAdmin, 0, 255, 0)
-			exports.global:sendMessageToAdmins("ADM-WARN: " .. getPlayerName(theAdmin):gsub("_"," ") .. " banned player " .. getPlayerName(thePlayer):gsub("_"," ") .. " silently.")
-			exports.global:sendMessageToAdmins("          Reason: " .. reason)
-		end
+	reason = tostring(reason or "No reason specified"):gsub("[%c]", " "):sub(1, 255)
+	local result = mysql:query("SELECT serial FROM bannedSerials WHERE serial = '" .. mysql:escape_string(serial) .. "' LIMIT 1")
+	if not result then return false end
+	local existing = mysql:fetch_assoc(result)
+	mysql:free_result(result)
+	if existing then
+		exports.global:sendMessageToAdmins("BAN-SYSTEM: Player " .. getPlayerName(thePlayer):gsub("_", " ") .. " is already banned. Kicking the player")
+		exports.global:sendMessageToAdmins("            Serial: " .. serial)
 		kickPlayer(thePlayer, theAdmin, reason)
-		exports.global:updateBans()
-		for key, value in ipairs(getElementsByType("player")) do
-			if getPlayerSerial(value) == serial then
-				kickPlayer(value, theAdmin, reason)
+		return false
+	end
+	local entry = mysql:query_free('INSERT INTO bannedSerials (serial) VALUES ("' .. mysql:escape_string(serial) .. '")')
+	if not entry then return false end
+	if not hide then
+		for _, value in ipairs(getElementsByType("player")) do
+			if tonumber(getElementData(value, "punishment_notification_selector")) ~= 1 or value == thePlayer or value == theAdmin then
+				outputChatBox(exports.global:getPlayerAdminTitle(theAdmin) .. " " .. getPlayerName(theAdmin):gsub("_", " ") .. " banned player " .. getPlayerName(thePlayer):gsub("_", " "), value, 255, 0, 0)
+				outputChatBox("Reason: " .. reason, value, 255, 0, 0)
 			end
 		end
+	else
+		outputChatBox("You have banned " .. getPlayerName(thePlayer):gsub("_", " ") .. " silently.", theAdmin, 0, 255, 0)
+		exports.global:sendMessageToAdmins("ADM-WARN: " .. getPlayerName(theAdmin):gsub("_", " ") .. " banned player " .. getPlayerName(thePlayer):gsub("_", " ") .. " silently.")
+		exports.global:sendMessageToAdmins("          Reason: " .. reason)
 	end
+	exports.global:updateBans()
+	for _, value in ipairs(getElementsByType("player")) do
+		if getPlayerSerial(value) == serial then
+			kickPlayer(value, theAdmin, reason)
+		end
+	end
+	return true
 end
-
 
 
 --/AUNCUFF
