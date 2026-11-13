@@ -230,24 +230,24 @@ function setMoney(thePlayer, amount, onSpawn)
 	return false
 end
 function hasMoney(thePlayer, amount)
-	amount = tonumber( amount ) or 0
-	if thePlayer and isElement(thePlayer) and amount >= 0 then
-		amount = math.floor( amount )
-		
-		return getMoney(thePlayer) >= amount
+	amount = tonumber(amount) or 0
+	if isElement(thePlayer) and amount >= 0 then
+		amount = math.floor(amount)
+		return (tonumber(getMoney(thePlayer, true)) or 0) >= amount
 	end
 	return false
 end
 
 function getMoney(thePlayer, nocheck)
+	if not isElement(thePlayer) then return 0 end
 	if not nocheck then
 		--checkMoneyHacks(thePlayer) -- Disabled because we don't use MTA's setPlayerMoney/getPlayerMoney at all. /MAXIME
 	end
-	return getElementData(thePlayer, "money") or 0
+	return tonumber(getElementData(thePlayer, "money")) or 0
 end
 
 function checkMoneyHacks(thePlayer)
-	if not getMoney(thePlayer, true) or getElementType(thePlayer) ~= "player" then return end
+	if not isElement(thePlayer) or getElementType(thePlayer) ~= "player" then return end
 	
 	local safemoney = getMoney(thePlayer, true)
 	local hackmoney = getPlayerMoney(thePlayer)
