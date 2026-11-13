@@ -57,148 +57,178 @@ addEventHandler( "onResourceStart", getResourceRootElement( ),
 )
 
 -- ////////////////////////////////////
-local moneyTimer = {}
-local loopLimit = 300
-function giveMoney(thePlayer, amount, fromBank)
-	amount = tonumber( amount ) or 0
-	if amount == 0 then
-		return true
-	elseif thePlayer and isElement(thePlayer) and amount > 0 then
-		amount = math.floor( amount )
-		if getElementType(thePlayer) == "player" then
-			if not mysql:query_free("UPDATE characters SET money = money + " .. amount .. " WHERE id = " .. getElementData( thePlayer, "dbid" ) ) then
-				return false
-			end
-
-			-- Money / Add a loop check in case takeItem function fails. / Maxime
-			moneyTimer[thePlayer] = 0
-			while exports['item-system']:takeItem(thePlayer, 134) do
-				if moneyTimer[thePlayer] >= loopLimit then
-					outputDebugString("exports['item-system']:takeItem() failed in global:giveMoney function!")
-					break
-				else
-					moneyTimer[thePlayer] = moneyTimer[thePlayer] + 1
-				end
-			end
-			
-			if not exports.anticheat:changeProtectedElementDataEx(thePlayer, "money", getMoney( thePlayer ) + amount, true ) then
-				return false
-			end
-
-			
-			if tonumber(getElementData(thePlayer, "money")) > 0 then
-				exports.global:giveItem(thePlayer, 134, tonumber(getElementData(thePlayer, "money")))
-			end
-			
-			triggerClientEvent(thePlayer, "moneyUpdateFX", thePlayer, true, amount, fromBank)
-			return true
-		elseif getElementType(thePlayer) == "team" then
-			return mysql:query_free("UPDATE factions SET bankbalance = bankbalance + " .. amount .. " WHERE id = " .. getElementData( thePlayer, "id" ) ) and exports.anticheat:changeProtectedElementDataEx(thePlayer, "money", getMoney( thePlayer ) + amount, true ) 
+local function restoreMoneyItems(player, values)
+	local restored = true
+	for _, value in ipairs(values or {}) do
+		if not exports.global:giveItem(player, 134, value) then
+			restored = false
+			outputDebugString("[global] Failed to restore cash inventory item for " .. getPlayerName(player), 1)
 		end
+	end
+	return restored
+end
+
+local function removeMoneyItems(player)
+	local inventory = exports["item-system"]:getItems(player)
+	if type(inventory) ~= "table" then return false, {} end
+	local values = {}
+	for _, item in ipairs(inventory) do
+		if tonumber(item[1]) == 134 then table.insert(values, item[2]) end
+	end
+	local removed = {}
+	for _, value in ipairs(values) do
+		if not exports["item-system"]:takeItem(player, 134, value) then
+			restoreMoneyItems(player, removed)
+			return false, {}
+		end
+		table.insert(removed, value)
+	end
+	return true, removed
+end
+
+local function setMoneyElementData(element, balance)
+	if exports.anticheat:changeProtectedElementDataEx(element, "money", balance, true) then
+		return true
+	end
+	return setElementData(element, "money", balance, true)
+end
+
+function giveMoney(thePlayer, amount, fromBank)
+	amount = tonumber(amount)
+	if not amount or amount ~= amount or amount == math.huge or amount == -math.huge or amount < 0 then return false end
+	amount = math.floor(amount)
+	if amount == 0 then return true end
+	if not isElement(thePlayer) then return false end
+
+	local elementType = getElementType(thePlayer)
+	local currentMoney = tonumber(getMoney(thePlayer, true)) or 0
+	local newBalance = currentMoney + amount
+	if newBalance > 2000000000 then return false end
+
+	if elementType == "player" then
+		local characterID = tonumber(getElementData(thePlayer, "dbid"))
+		if not characterID or characterID < 1 then return false end
+		local removed, oldItems = removeMoneyItems(thePlayer)
+		if not removed then return false end
+		if not mysql:query_free("UPDATE characters SET money = money + " .. amount .. " WHERE id = " .. characterID) then
+			restoreMoneyItems(thePlayer, oldItems)
+			return false
+		end
+		if not setMoneyElementData(thePlayer, newBalance) then
+			mysql:query_free("UPDATE characters SET money = money - " .. amount .. " WHERE id = " .. characterID)
+			restoreMoneyItems(thePlayer, oldItems)
+			return false
+		end
+		if newBalance > 0 and not exports.global:giveItem(thePlayer, 134, newBalance) then
+			outputDebugString("[global] Balance credited but cash inventory item could not be recreated for " .. getPlayerName(thePlayer), 1)
+		end
+		triggerClientEvent(thePlayer, "moneyUpdateFX", thePlayer, true, amount, fromBank)
+		return true
+	elseif elementType == "team" then
+		local factionID = tonumber(getElementData(thePlayer, "id"))
+		if not factionID or factionID < 1 then return false end
+		if not mysql:query_free("UPDATE factions SET bankbalance = bankbalance + " .. amount .. " WHERE id = " .. factionID) then return false end
+		if not setMoneyElementData(thePlayer, newBalance) then
+			mysql:query_free("UPDATE factions SET bankbalance = bankbalance - " .. amount .. " WHERE id = " .. factionID)
+			return false
+		end
+		return true
 	end
 	return false
 end
 
 function takeMoney(thePlayer, amount, rest, toBank)
-	amount = tonumber( amount ) or 0
-	if amount == 0 then
-		return true, 0
-	elseif thePlayer and isElement(thePlayer) and amount > 0 then
-		amount = math.ceil( amount )
-		
-		local money = getMoney( thePlayer )
-		if rest and amount > money then
-			amount = money
-		end
-		
-		if amount == 0 then
-			return true, 0
-		elseif hasMoney(thePlayer, amount) then
-			if getElementType(thePlayer) == "player" then
-				if not mysql:query_free("UPDATE characters SET money = money - " .. amount .. " WHERE id = " .. getElementData( thePlayer, "dbid" ) ) then
-					return false
-				end
-				
-				-- Money / Add a loop check in case takeItem function fails. / Maxime
-				moneyTimer[thePlayer] = 0
-				while exports['item-system']:takeItem(thePlayer, 134) do
-					if moneyTimer[thePlayer] >= loopLimit then
-						outputDebugString("exports['item-system']:takeItem() failed in global:takeMoney function!")
-						break
-					else
-						moneyTimer[thePlayer] = moneyTimer[thePlayer] + 1
-					end
-				end
+	amount = tonumber(amount)
+	if not amount or amount ~= amount or amount == math.huge or amount == -math.huge or amount < 0 then return false, 0 end
+	amount = math.ceil(amount)
+	if amount == 0 then return true, 0 end
+	if not isElement(thePlayer) then return false, 0 end
 
-				if not exports.anticheat:changeProtectedElementDataEx(thePlayer, "money", money - amount, true )	then
-					return false
-				end
+	local elementType = getElementType(thePlayer)
+	local currentMoney = tonumber(getMoney(thePlayer, true)) or 0
+	if rest and amount > currentMoney then amount = math.max(0, currentMoney) end
+	if amount == 0 then return true, 0 end
+	if currentMoney < amount then return false, 0 end
+	local newBalance = currentMoney - amount
 
-				
-				if tonumber(getElementData(thePlayer, "money")) > 0 then
-					exports.global:giveItem(thePlayer, 134, tonumber(getElementData(thePlayer, "money")))
-				end
-				
-				triggerClientEvent(thePlayer, "moneyUpdateFX", thePlayer, false, amount, toBank)
-				return true, amount
-			elseif getElementType(thePlayer) == "team" then
-				return mysql:query_free("UPDATE factions SET bankbalance = bankbalance - " .. amount .. " WHERE id = " .. getElementData( thePlayer, "id" ) ) and exports.anticheat:changeProtectedElementDataEx(thePlayer, "money", money - amount, true )	
-			end
+	if elementType == "player" then
+		local characterID = tonumber(getElementData(thePlayer, "dbid"))
+		if not characterID or characterID < 1 then return false, 0 end
+		local removed, oldItems = removeMoneyItems(thePlayer)
+		if not removed then return false, 0 end
+		if not mysql:query_free("UPDATE characters SET money = money - " .. amount .. " WHERE id = " .. characterID .. " AND money >= " .. amount) then
+			restoreMoneyItems(thePlayer, oldItems)
 			return false, 0
 		end
+		if not setMoneyElementData(thePlayer, newBalance) then
+			mysql:query_free("UPDATE characters SET money = money + " .. amount .. " WHERE id = " .. characterID)
+			restoreMoneyItems(thePlayer, oldItems)
+			return false, 0
+		end
+		if newBalance > 0 and not exports.global:giveItem(thePlayer, 134, newBalance) then
+			outputDebugString("[global] Balance debited but cash inventory item could not be recreated for " .. getPlayerName(thePlayer), 1)
+		end
+		triggerClientEvent(thePlayer, "moneyUpdateFX", thePlayer, false, amount, toBank)
+		return true, amount
+	elseif elementType == "team" then
+		local factionID = tonumber(getElementData(thePlayer, "id"))
+		if not factionID or factionID < 1 then return false, 0 end
+		if not mysql:query_free("UPDATE factions SET bankbalance = bankbalance - " .. amount .. " WHERE id = " .. factionID) then return false, 0 end
+		if not setMoneyElementData(thePlayer, newBalance) then
+			mysql:query_free("UPDATE factions SET bankbalance = bankbalance + " .. amount .. " WHERE id = " .. factionID)
+			return false, 0
+		end
+		return true, amount
 	end
 	return false, 0
 end
 
 function setMoney(thePlayer, amount, onSpawn)
-	amount = tonumber( amount ) or 0
-	if thePlayer and isElement(thePlayer) and (amount >= 0 or onSpawn) then
-		amount = math.floor( amount )
-		if getElementType(thePlayer) == "player" then
-			if not onSpawn then
-				if not mysql:query_free("UPDATE characters SET money = " .. amount .. " WHERE id = " .. getElementData( thePlayer, "dbid" ) ) then
-					return false
-				end
-			end
+	amount = tonumber(amount)
+	if not amount or amount ~= amount or amount == math.huge or amount == -math.huge
+		or (amount < 0 and not onSpawn) or amount > 2000000000 then return false end
+	amount = math.floor(amount)
+	if not isElement(thePlayer) then return false end
 
-			-- Money / Add a loop check in case takeItem function fails. / Maxime
-			moneyTimer[thePlayer] = 0
-			while exports['item-system']:takeItem(thePlayer, 134) do
-				if moneyTimer[thePlayer] >= loopLimit then
-					outputDebugString("exports['item-system']:takeItem() failed in global:takeMoney function!")
-					break
-				else
-					moneyTimer[thePlayer] = moneyTimer[thePlayer] + 1
-				end
-			end
-
-			local currentMoney = getElementData(thePlayer, "money")
-
-			if not exports.anticheat:changeProtectedElementDataEx(thePlayer, "money", amount, true ) then
-				return false
-			end
-
-			
-			if amount > 0 then
-				exports.global:giveItem(thePlayer, 134, amount)
-			end
-		
-			
-			if not onSpawn then
-				if amount > currentMoney then
-					triggerClientEvent(thePlayer, "moneyUpdateFX", thePlayer, true, amount-currentMoney)
-				elseif amount < currentMoney then
-					triggerClientEvent(thePlayer, "moneyUpdateFX", thePlayer, false, currentMoney-amount)
-				end
-			end
-
-			return true
-		elseif getElementType(thePlayer) == "team" then
-			return mysql:query_free("UPDATE factions SET bankbalance = " .. amount .. " WHERE id = " .. getElementData( thePlayer, "id" ) ) and exports.anticheat:changeProtectedElementDataEx(thePlayer, "money", amount, true)
+	local elementType = getElementType(thePlayer)
+	local currentMoney = tonumber(getMoney(thePlayer, true)) or 0
+	if elementType == "player" then
+		local characterID = tonumber(getElementData(thePlayer, "dbid"))
+		if not onSpawn and (not characterID or characterID < 1) then return false end
+		local removed, oldItems = removeMoneyItems(thePlayer)
+		if not removed then return false end
+		if not onSpawn and not mysql:query_free("UPDATE characters SET money = " .. amount .. " WHERE id = " .. characterID) then
+			restoreMoneyItems(thePlayer, oldItems)
+			return false
 		end
+		if not setMoneyElementData(thePlayer, amount) then
+			if not onSpawn then mysql:query_free("UPDATE characters SET money = " .. currentMoney .. " WHERE id = " .. characterID) end
+			restoreMoneyItems(thePlayer, oldItems)
+			return false
+		end
+		if amount > 0 and not exports.global:giveItem(thePlayer, 134, amount) then
+			outputDebugString("[global] Balance set but cash inventory item could not be recreated for " .. getPlayerName(thePlayer), 1)
+		end
+		if not onSpawn then
+			if amount > currentMoney then
+				triggerClientEvent(thePlayer, "moneyUpdateFX", thePlayer, true, amount - currentMoney)
+			elseif amount < currentMoney then
+				triggerClientEvent(thePlayer, "moneyUpdateFX", thePlayer, false, currentMoney - amount)
+			end
+		end
+		return true
+	elseif elementType == "team" then
+		local factionID = tonumber(getElementData(thePlayer, "id"))
+		if not factionID or factionID < 1 then return false end
+		if not mysql:query_free("UPDATE factions SET bankbalance = " .. amount .. " WHERE id = " .. factionID) then return false end
+		if not setMoneyElementData(thePlayer, amount) then
+			mysql:query_free("UPDATE factions SET bankbalance = " .. currentMoney .. " WHERE id = " .. factionID)
+			return false
+		end
+		return true
 	end
+	return false
 end
-
 function hasMoney(thePlayer, amount)
 	amount = tonumber( amount ) or 0
 	if thePlayer and isElement(thePlayer) and amount >= 0 then
