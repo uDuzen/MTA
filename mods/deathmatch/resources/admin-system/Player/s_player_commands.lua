@@ -476,17 +476,17 @@ function givePlayerGun(thePlayer, commandName, targetPlayer, ...)
 					return
 				end
 
-				if not weaponID or weaponID < 1 or weaponID > 46 or weaponID ~= math.floor(weaponID) or not exports.weapon:getAmmoPerClip(weaponID) then
+				if not weaponID or weaponID < 1 or weaponID > 46 or weaponID ~= math.floor(weaponID) or not getWeaponNameFromID(weaponID) then
 					outputChatBox("[MAKEGUN] Invalid Weapon Name/ID. Type /gunlist for an overview of all available weapons.", thePlayer, 255, 0, 0)
 					return
 				end
 
-				local logged = getElementData(targetPlayer, "loggedin")
+				local logged = tonumber(getElementData(targetPlayer, "loggedin"))
 				local hiddenAdmin = getElementData(thePlayer, "hiddenadmin")
 
-				if (logged==0) then
+				if logged ~= 1 then
 					outputChatBox("[MAKEGUN] Player is not logged in.", thePlayer, 255, 0, 0)
-				elseif (logged==1) then
+				else
 
 					local adminDBID = tonumber(getElementData(thePlayer, "account:character:id"))
 					local playerDBID = tonumber(getElementData(targetPlayer, "account:character:id"))
@@ -512,9 +512,12 @@ function givePlayerGun(thePlayer, commandName, targetPlayer, ...)
 					local allSerials = ""
 					local give, error = ""
 					for variable = 1, quantity, 1 do
-						local mySerial = exports.global:createWeaponSerial( 1, adminDBID, playerDBID)
-						--outputChatBox(mySerial)
-						give, error = exports.global:giveItem(targetPlayer, 115, weaponID..":"..mySerial..":"..getWeaponNameFromID(weaponID)..":0")
+						local mySerial = exports.global:createWeaponSerial(1, adminDBID, playerDBID)
+						if not mySerial or tostring(mySerial) == "" then
+							give, error = false, "weapon serial could not be created"
+						else
+							give, error = exports.global:giveItem(targetPlayer, 115, weaponID .. ":" .. tostring(mySerial) .. ":" .. getWeaponNameFromID(weaponID) .. ":0")
+						end
 						if give then
 							exports.logs:dbLog(thePlayer, 4, targetPlayer, "GIVEWEAPON "..getWeaponNameFromID(weaponID).." "..tostring(mySerial))
 							if count == 0 then
