@@ -959,9 +959,13 @@ function pickupItem(object, leftammo)
 
 	if itemID == 115 or itemID == 116 then
 		if isThisGunDuplicated(itemID, itemValue, source) then
+			if not mysql:query_free("DELETE FROM worlditems WHERE id = " .. id .. " LIMIT 1") then
+				exports.anticheat:setEld(object, "transfering", nil, "all")
+				outputChatBox("The duplicated weapon could not be removed from storage. Please contact staff.", source, 255, 0, 0)
+				return false
+			end
 			destroyElement(object)
-			mysql:query_free("DELETE FROM worlditems WHERE id='" .. id .. "'")
-			outputChatBox("The weapon you tried to pick up was duplicated by bug abuser and can not be used anymore. We're sorry to delete it now.", source, 255,0,0)
+			outputChatBox("The weapon you tried to pick up was duplicated by a bug abuser and has been removed.", source, 255, 0, 0)
 			return false
 		end
 
@@ -1075,7 +1079,12 @@ function pickupItem(object, leftammo)
 		end
 		local giveAmount = ammoAmount
 		local remainingAmount = 0
-		if leftAmount and leftAmount > 0 and leftAmount < ammoAmount then
+		if leftammo ~= nil then
+			if not leftAmount or leftAmount < 1 or leftAmount > ammoAmount
+				or leftAmount ~= math.floor(leftAmount) then
+				exports.anticheat:setEld(object, "transfering", nil, "all")
+				return false
+			end
 			giveAmount = leftAmount
 			remainingAmount = ammoAmount - leftAmount
 		end
