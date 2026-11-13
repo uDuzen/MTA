@@ -273,11 +273,13 @@ addCommandHandler("gettax", getTax, false, false)
 function setFactionBudget(thePlayer, commandName, factionID, amount)
 	local isInFaction, rank = isPlayerInFaction(thePlayer, 3)
 	if isInFaction and rank >= 15 then
-		local amount = tonumber( amount )
-		if not factionID or not amount or amount ~= amount or amount == math.huge or amount < 0 or amount > 1000000 then
+		local amount = tonumber(amount)
+		factionID = tonumber(factionID)
+		if not factionID or factionID < 1 or factionID ~= math.floor(factionID)
+			or not amount or amount ~= amount or amount == math.huge or amount < 1
+			or amount > 1000000 or amount ~= math.floor(amount) then
 			outputChatBox("SYNTAX: /" .. commandName .. " [Faction ID] [Money]", thePlayer, 255, 194, 14)
 		else
-			factionID = tonumber(factionID)
 			if factionID and factionID > 0 then
 				local theTeam = exports.pool:getElement("team", factionID)
 				amount = tonumber(amount)
