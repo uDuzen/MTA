@@ -272,7 +272,7 @@ function executePunishment(admin, targetPlayer, reason, repeated, pointsum, ip, 
 
 			if isElement(targetPlayer) then
 				for index, player in pairs(exports.pool:getPoolElementsByType("player")) do
-					if tonumber( getElementData( player, "punishment_notification_selector") ) ~= 1 or player == thePlayer or player == targetPlayer then
+					if tonumber( getElementData( player, "punishment_notification_selector") ) ~= 1 or player == admin or player == targetPlayer then
 						outputChatBox("[PUNISH-BAN]: " .. exports.global:getPlayerFullIdentity(targetPlayer) .. " has been banned "..(hours == 0 and "Permanently" or "for "..hours.." hours")..".", player, 255, 0, 0)
 					end
 				end
@@ -313,7 +313,8 @@ function checkExpiration(thePlayer, accountID)
 	end
 
 	--local qh = dbQuery(exports.mysql:getConn('mta'), "SELECT id, punishpoints, punishdate, TIMESTAMPDIFF(DAY,punishdate,NOW()) AS date FROM accounts WHERE `id`=? AND TIMESTAMPDIFF(DAY,punishdate,NOW()) > 45 LIMIT 1", accountID)
-	local qh = dbQuery(exports.mysql:getConn('core'), "SELECT id, punishpoints, punishdate, TIMESTAMPDIFF(DAY,punishdate,NOW()) AS date FROM accounts WHERE `id`=? LIMIT 1", accountID)
+	local qh = dbQuery(exports.mysql:getConn('core'), "SELECT id, punishpoints, punishdate, TIMESTAMPDIFF(DAY,punishdate,NOW()) AS date FROM accounts WHERE `id`=? LIMIT 1", tonumber(accountID))
+	if not qh then return false end
 	local sqlHandler = dbPoll(qh, 10000)
 
 	if sqlHandler and #sqlHandler > 0 and sqlHandler[1]['id'] then
@@ -323,7 +324,9 @@ function checkExpiration(thePlayer, accountID)
 			local currentPoints = tonumber(sqlHandler[1].punishpoints) or 0
 			local newPointTotal = currentPoints - toBeRemoved
 			if newPointTotal <= 0 then newPointTotal = 0 end
-			dbExec( exports.mysql:getConn('core'), "UPDATE `accounts` SET `punishpoints`=?, `punishdate`=DATE_ADD(punishdate, INTERVAL ? DAY) WHERE `id`=?", newPointTotal, tonumber(45*toBeRemoved), accountID )
+			if not dbExec(exports.mysql:getConn('core'), "UPDATE `accounts` SET `punishpoints`=?, `punishdate`=DATE_ADD(punishdate, INTERVAL ? DAY) WHERE `id`=?", newPointTotal, tonumber(45*toBeRemoved), tonumber(accountID)) then
+				return false
+			end
 			if thePlayer then
 				exports.anticheat:changeProtectedElementDataEx(thePlayer, "punishment:points", tonumber(newPointTotal), true)
 			end
