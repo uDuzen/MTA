@@ -50,21 +50,25 @@ function punishPlayer(thePlayer, commandName, target, points, repetitive, ...)
 		-- End command usage check
 
 		local reason = table.concat({...}," ")
-		local currentPoints = tonumber(getElementData(targetPlayer, "punishment:points"))
+		local currentPoints = tonumber(getElementData(targetPlayer, "punishment:points")) or 0
 
 		if currentPoints == 0 or getElementData(targetPlayer, "punishment:date") == nil then
 			local result2 = sqlSetDate(getElementData(targetPlayer, "account:id"))
 			if not result2 then
 				outputChatBox("ERROR: #PUNISH02 - bugs.owlgaming.net", thePlayer, 255, 0, 0)
+				return false
 			end
 		elseif currentPoints > 0 then
 			currentPoints = checkExpiration(targetPlayer)
 		end
 
-		exports.anticheat:changeProtectedElementDataEx(targetPlayer, "punishment:points", tonumber(points) + tonumber(currentPoints), true) -- update element data
-
-		local result = sqlAddPoints(thePlayer, getElementData(targetPlayer, "account:id"), tonumber(points) + tonumber(currentPoints)) -- update sql as well!
-		if not result then outputChatBox("Oops! Something went wrong!", thePlayer, 255, 0, 0) end
+		local newPoints = tonumber(points) + currentPoints
+		local result = sqlAddPoints(thePlayer, getElementData(targetPlayer, "account:id"), newPoints)
+		if not result then
+			outputChatBox("Oops! Something went wrong; punishment points were not changed.", thePlayer, 255, 0, 0)
+			return false
+		end
+		exports.anticheat:changeProtectedElementDataEx(targetPlayer, "punishment:points", newPoints, true)
 
 		-- Tell the world
 		local adminTitle = exports.global:getAdminTitle1(thePlayer)
@@ -75,7 +79,7 @@ function punishPlayer(thePlayer, commandName, target, points, repetitive, ...)
 			outputChatBox("[PUNISH-SILENCED]: Reason: " .. reason, targetPlayer, 255, 0, 0)
 		else
 			for index, player in pairs( exports.pool:getPoolElementsByType("player")) do
-				if tonumber( getElementData( player, "punishment_notification_selector") ) ~= 1 or player == thePlayer or player == targetPlayer then
+				if tonumber( getElementData( player, "punishment_notification_selector") ) ~= 1 or player == admin or player == targetPlayer then
 					outputChatBox("[PUNISH]: "..adminTitle.." issued "..points.." points to "..targetPlayerName..".", player, 255, 0, 0)
 					outputChatBox("[PUNISH]: Reason: " .. reason, player, 255, 0, 0)
 				end
@@ -134,16 +138,16 @@ function offlinePunishPlayer(thePlayer, commandName, target, points, repetitive,
 		local qh = dbQuery(exports.mysql:getConn('core'), "SELECT id, username, ip, punishdate, punishpoints FROM accounts WHERE `username`=? LIMIT 1", target)
 		local result = dbPoll(qh, 10000)
 		if result and #result > 0 then
-			accID = result[1].id
-			punishdate = result[1].punishdate
-			punishpoints = result[1].punishpoints
+			local accID = tonumber(result[1].id)
+			local punishdate = result[1].punishdate
+			local punishpoints = tonumber(result[1].punishpoints) or 0
 			target = result[1].username
-			ip = result[1].ip
+			local ip = result[1].ip
 
 			local qh2 = dbQuery(exports.mysql:getConn('mta'), "SELECT mtaserial FROM account_details WHERE `account_id`=? LIMIT 1", accID)
 			local result2 = dbPoll(qh2, 1000)
 			if result2 and #result2 > 0 then
-				serial = result2[1].mtaserial
+				local serial = result2[1].mtaserial
 			end
 		else
 			outputChatBox("Error: Username not found!", thePlayer, 255, 0, 0)
@@ -265,7 +269,7 @@ function executePunishment(admin, targetPlayer, reason, repeated, pointsum, ip, 
 				kickPlayer(targetPlayer, admin, "Banned for '"..reason.."' (".. (hours == 0 and "Permanent" or hours.." hours") .. ")")
 			else
 				for index, player in pairs(exports.pool:getPoolElementsByType("player")) do
-					if tonumber( getElementData( player, "punishment_notification_selector") ) ~= 1 or player == thePlayer then
+					if tonumber( getElementData( player, "punishment_notification_selector") ) ~= 1 or player == admin then
 						outputChatBox("[OPUNISH-BAN]: " .. username .. " has been banned "..(hours == 0 and "Permanently" or "for "..hours.." hours")..".", player, 255, 0, 0)
 					end
 				end
@@ -306,7 +310,7 @@ function checkExpiration(thePlayer, accountID)
 		local date = tonumber(sqlHandler[1]['date']) or 0
 		local toBeRemoved = math.floor(date / 45)
 		if toBeRemoved >= 1 then
-			local currentPoints = tonumber(sqlHandler[1].punishpoints)
+			local currentPoints = tonumber(sqlHandler[1].punishpoints) or 0
 			local newPointTotal = currentPoints - toBeRemoved
 			if newPointTotal <= 0 then newPointTotal = 0 end
 			dbExec( exports.mysql:getConn('core'), "UPDATE `accounts` SET `punishpoints`=?, `punishdate`=DATE_ADD(punishdate, INTERVAL ? DAY) WHERE `id`=?", newPointTotal, tonumber(45*toBeRemoved), accountID )
