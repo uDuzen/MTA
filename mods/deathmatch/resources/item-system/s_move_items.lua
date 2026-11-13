@@ -451,27 +451,31 @@ addEventHandler( "moveToElement", getRootElement(), moveToElement )
 local function moveWorldItemToElement( item, element )
 	if not client then return false end
 	local source = client
+	local function finishMove() triggerClientEvent(source, "finishItemMove", source) end
 	if false then
 		return outputDebugString("[ITEM] moveWorldItemToElement / Disabled ")
 	end
 
-	if not isElement( item ) or not isElement( element ) or not canAccessElement( source, element ) then
-		return
+	if not isElement(item) or not isElement(element) or not canAccessElement(source, element) then
+		finishMove()
+		return false
 	end
 
 	local itemWorldResource = getResourceFromName("item-world")
 	local itemWorldRoot = itemWorldResource and getResourceRootElement(itemWorldResource)
 	if getElementType(item) ~= "object" or not itemWorldRoot
 		or getElementParent(getElementParent(item)) ~= itemWorldRoot then
+		finishMove()
 		return false
 	end
 	local id = tonumber(getElementData(item, "id"))
 	if not id or id < 1 or id ~= math.floor(id) then
 		outputChatBox("Error: No world item ID. Notify a scripter. (s_move_items)", source, 255, 0, 0)
+		finishMove()
 		return false
 	end
 	local itemID = tonumber(getElementData(item, "itemID"))
-	if not itemID or itemID < 1 or itemID ~= math.floor(itemID) then return false end
+	if not itemID or itemID < 1 or itemID ~= math.floor(itemID) then finishMove(); return false end
 	local itemValue = getElementData(item, "itemValue") or 1
 	local metadata = getElementData( item, "metadata" )
 	local name = getName(element)
@@ -480,29 +484,33 @@ local function moveWorldItemToElement( item, element )
 	--31 -> 43  = DRUGS
 	if ((itemID >= 31) and (itemID <= 43)) or itemBannedByAltAltChecker[itemID] or itemID == 223 then
 		outputChatBox(getItemName(itemID).." can only moved directly from your inventory to this "..name..".", source, 255, 0, 0)
+		finishMove()
 		return false
 	end
 
-
-	if (getElementType(element) == "ped") and getElementData(element,"shopkeeper") then
+	if getElementType(element) == "ped" and getElementData(element, "shopkeeper") then
+		finishMove()
 		return false
 	end
 
 	if not canPickup(source, item) then
 		outputChatBox("You can not move this item. Contact an admin via F1.", source, 255, 0, 0)
-		return
+		finishMove()
+		return false
 	end
 
 	if itemID == 138 then
 		if not exports.integration:isPlayerTrialAdmin(source) and getElementType(element) == "vehicle" then
 			outputChatBox("Only an admin can install this item.", source, 255, 0, 0)
-			return
+			finishMove()
+			return false
 		end
 	end
 
 	if itemID == 169 or itemID == 262 or itemID == 263 then
 		--outputChatBox("Nay.")
-		return
+		finishMove()
+		return false
 	end
 
 	if itemID == 134 and getElementType(element) == "player" then
@@ -510,18 +518,21 @@ local function moveWorldItemToElement( item, element )
 		local contents = getItems(item)
 		if not amount or amount ~= amount or amount == math.huge or amount <= 0
 			or type(contents) ~= "table" or #contents > 0 then
+			finishMove()
 			return false
 		end
-		if not exports.global:giveMoney(element, amount) then return false end
+		if not exports.global:giveMoney(element, amount) then finishMove(); return false end
 		if not mysql:query_free("DELETE FROM worlditems WHERE id='" .. id .. "' LIMIT 1") then
 			if not exports.global:takeMoney(element, amount) then
 				outputDebugString("[item-system] Failed to reverse world cash pickup for world item " .. id, 1)
 			end
+			finishMove()
 			return false
 		end
 		output(source, element, itemID, itemValue, true, metadata)
 		exports.logs:dbLog(source, 39, source, getPlayerName(source) .. " picked up $" .. tostring(amount) .. " from world item #" .. id)
 		destroyElement(item)
+		finishMove()
 		return true
 	end
 
@@ -555,7 +566,7 @@ local function moveWorldItemToElement( item, element )
 		if type(targetItems) ~= "table" or type(worldItems) ~= "table" then
 			local shellSlot = type(targetItems) == "table" and #targetItems or nil
 			if shellSlot then takeItemFromSlot(element, shellSlot) end
-			triggerClientEvent(source, "finishItemMove", source)
+			finishMove()
 			return false
 		end
 		local shellSlot = #targetItems
@@ -596,8 +607,11 @@ local function moveWorldItemToElement( item, element )
 			end
 		end
 	else
-		outputChatBox( "The Inventory is full.", source, 255, 0, 0 )
+		outputChatBox("The Inventory is full.", source, 255, 0, 0)
+		finishMove()
+		return false
 	end
+	finishMove()
 end
 
 addEvent( "moveWorldItemToElement", true )
