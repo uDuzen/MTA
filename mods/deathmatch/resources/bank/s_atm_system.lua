@@ -37,6 +37,12 @@ local function validateATMCardNumber(cardNumber)
 		and cardNumber:match("^%d%d%d%d %d%d%d%d %d%d%d%d %d%d%d%d$") ~= nil
 end
 
+local function isAuthenticatedBankPlayer(player)
+	return isElement(player) and getElementType(player) == "player"
+		and source == player and (client == nil or client == player)
+		and tonumber(getElementData(player, "loggedin")) == 1
+end
+
 local function fetchATMCardOwner(cardNumber)
 	if not validateATMCardNumber(cardNumber) then return false end
 	local row = mysql:query_fetch_assoc("SELECT c.id, c.charactername, c.bankmoney FROM characters c "
@@ -150,96 +156,125 @@ addEventHandler( "bank:takeOutATMCard", getRootElement(), takeOutATMCard )
 local cooldownSec = 5000
 
 function applyForNewATMCard(replacingOldATMCard, limitType)
-	local playerName = getPlayerName(source)
-	local playerGender = (getElementData(source,"gender") == 0) and "sir" or "madam"
-	local charID = getElementData(source,"dbid")
-	--[[
-	if not replacingOldATMCard and cooldown[source] and ((getTickCount() - cooldown[source]) < 1000*cooldownSec) then
-		exports.hud:sendBottomNotification(source, "Maxime Du Trieux says:", "'I'm sorry, "..playerGender..". Our system is currently busy, please come back later'")
+	local player = client or source
+	if not isAuthenticatedBankPlayer(player)
+		or (replacingOldATMCard ~= nil and type(replacingOldATMCard) ~= "boolean") then
 		return false
 	end
-	]]
+	local charID = tonumber(getElementData(player, "dbid"))
+	if not charID or charID < 1 or charID ~= math.floor(charID) then return false end
 
-	if not replacingOldATMCard then
-		local check = mysql:query_fetch_assoc("SELECT * FROM `atm_cards` WHERE `card_type`='1' AND `card_owner`='"..charID.."' ")
-		if check then
-			if check["card_id"] then
-				exports.hud:sendBottomNotification(source, "Maxime Du Trieux says:", "'I'm sorry,"..playerGender.." but we don't allow multiple ATM cards'")
-				triggerClientEvent(source, "atm:atmCardExisted", source)
+	limitType = tonumber(limitType) or 1
+	if limitType ~= 1 and limitType ~= 2 and limitType ~= 3 then return false end
+	local price = limitType == 1 and 50 or (limitType == 2 and 200 or 500)
+	local playerName = getPlayerName(player)
+	local playerGender = tonumber(getElementData(player, "gender")) == 0 and "sir" or "madam"
+
+	local oldCard
+	local existing = mysql:query_fetch_assoc("SELECT card_id, card_owner, card_number, card_pin, card_locked, card_type, limit_type "
+		.. "FROM atm_cards WHERE card_type = '1' AND card_owner = " .. charID .. " LIMIT 1")
+	if replacingOldATMCard then
+		if existing and existing.card_id then
+			oldCard = existing
+			local oldCardID = tonumber(oldCard.card_id)
+			if not oldCardID or oldCardID < 1 then return false end
+			if not mysql:query_free("DELETE FROM atm_cards WHERE card_id = " .. oldCardID
+				.. " AND card_owner = " .. charID .. " LIMIT 1") then
+				exports.hud:sendBottomNotification(player, "SQL Error", "Your previous ATM card could not be replaced. No new card was issued.")
 				return false
 			end
-		else
-			triggerClientEvent(source, "atm:chooseAtm", source)
-			return false
 		end
+	elseif existing and existing.card_id then
+		exports.hud:sendBottomNotification(player, "Maxime Du Trieux says:", "'I'm sorry, " .. playerGender .. ", but we don't allow multiple ATM cards.'")
+		triggerClientEvent(player, "atm:atmCardExisted", player)
+		return false
 	else
-		triggerEvent("bank:cancelATMCard", source, true)
+		triggerClientEvent(player, "atm:chooseAtm", player)
+		return false
 	end
 
-	local numSum = false
-	while true do
-		local num1 = tostring(math.random(0,9999))
-		local num2 = tostring(math.random(0,9999))
-		local num3 = tostring(math.random(0,9999))
-		local num4 = tostring(math.random(0,9999))
-		numSum = num1.." "..num2.." "..num3.." "..num4
-		--outputDebugString(numSum)
-		if string.len(numSum) == 19 then
-			local checkNumber = mysql:query_fetch_assoc("SELECT `card_number` FROM `atm_cards` WHERE `card_number`='"..numSum.."' ")
-			if (not checkNumber or checkNumber["card_number"]==mysql_null() or checkNumber["card_number"] ~= numSum) then
-				break
-			end
+	local function restoreOldCard()
+		if not oldCard then return true end
+		local restored = mysql:query_free("INSERT INTO atm_cards (card_id, card_owner, card_number, card_pin, card_locked, card_type, limit_type) VALUES ("
+			.. tonumber(oldCard.card_id) .. ", " .. charID .. ", '" .. tostring(oldCard.card_number)
+			.. "', '" .. tostring(oldCard.card_pin or "0000") .. "', "
+			.. tonumber(oldCard.card_locked or 0) .. ", " .. tonumber(oldCard.card_type or 1) .. ", "
+			.. tonumber(oldCard.limit_type or 1) .. ")")
+		if not restored then
+			outputDebugString("[BANK] CRITICAL: failed to restore previous ATM card record for character #" .. charID, 1)
+			outputChatBox("Your previous ATM card could not be restored. Contact staff immediately.", player, 255, 0, 0)
 		end
+		return restored
 	end
 
-	if not numSum then
-		exports.hud:sendBottomNotification(source, "SQL Error", "An SQL Error CODE01 has occured in Bank System. Please report this on http://bugs.owlgaming.net")
+	if not exports["item-system"]:loadItems(player) or not exports.global:hasSpaceForItem(player, 150, 1) then
+		restoreOldCard()
+		exports.hud:sendBottomNotification(player, "Inventory", "Your inventory is full or unavailable. No ATM card was issued.")
 		return false
 	end
 
-	if not exports.global:hasSpaceForItem(source, 150, 1) then
-		exports.hud:sendBottomNotification(source, "Inventory", "Your inventory is full. Please clear them up and retry.")
-		return false
-	end
-
-	if not limitType then
-		limitType = 1
-	end
-
-	if limitType == 2 then
-		if not exports.global:takeMoney(source, 200) then
-			exports.hud:sendBottomNotification(source, "Maxime Du Trieux says:", "'Could I have $200 please, "..playerGender.."'.")
+	local cardNumber
+	for attempt = 1, 100 do
+		local candidate = string.format("%04d %04d %04d %04d",
+			math.random(0, 9999), math.random(0, 9999), math.random(0, 9999), math.random(0, 9999))
+		local query = mysql:query("SELECT card_number FROM atm_cards WHERE card_number = '" .. candidate .. "' LIMIT 1")
+		if not query then
+			restoreOldCard()
+			exports.hud:sendBottomNotification(player, "SQL Error", "The card number could not be reserved. Please try again.")
 			return false
 		end
-	elseif limitType == 3 then
-		if not exports.global:takeMoney(source, 500) then
-			exports.hud:sendBottomNotification(source, "Maxime Du Trieux says:", "'Could I have $500 please, "..playerGender.."'.")
-			return false
-		end
-	else
-		if not exports.global:takeMoney(source, 50) then
-			exports.hud:sendBottomNotification(source, "Maxime Du Trieux says:", "'Could I have $50 please, "..playerGender.."'.")
-			return false
+		local row = mysql:fetch_assoc(query)
+		mysql:free_result(query)
+		if not row then
+			cardNumber = candidate
+			break
 		end
 	end
-
-	if not exports.global:giveItem(source, 150, numSum..";"..charID..";"..limitType) then
-		exports.hud:sendBottomNotification(source, "Internal Error", "An SQL Error CODE0223 has occured in Bank System. Please report this on http://bugs.owlgaming.net.")
+	if not cardNumber then
+		restoreOldCard()
+		exports.hud:sendBottomNotification(player, "SQL Error", "A unique card number could not be generated. Please try again.")
 		return false
 	end
 
-	local makeNewCard = mysql:query_free("INSERT INTO `atm_cards`(`card_owner`, `card_number`, `limit_type`) VALUES ('"..tostring(charID).."', '"..numSum.."', '"..limitType.."') ")
-	if not makeNewCard then
-		exports.hud:sendBottomNotification(source, "SQL Error", "An SQL Error CODE02 has occured in Bank System. Please report this on http://bugs.owlgaming.net.")
+	if not exports.global:takeMoney(player, price) then
+		restoreOldCard()
+		exports.hud:sendBottomNotification(player, "Maxime Du Trieux says:", "'Could I have $" .. price .. " please, " .. playerGender .. "?'")
 		return false
 	end
 
-	triggerEvent('sendAme', source, "takes some dollar notes and gives them to Maxime Du Trieux.")
-	exports.global:sendLocalText(source, "* Maxime Du Trieux gives "..tostring(playerName):gsub("_"," ").." a sleek plastic ATM card.", 255, 51, 102, 30, {}, true)
+	local cardValue = cardNumber .. ";" .. charID .. ";" .. limitType
+	if not exports.global:giveItem(player, 150, cardValue) then
+		local refunded = exports.global:giveMoney(player, price)
+		local oldRestored = restoreOldCard()
+		if not refunded or not oldRestored then
+			outputDebugString("[BANK] CRITICAL: ATM card creation failed and rollback was incomplete for character #" .. charID, 1)
+		end
+		exports.hud:sendBottomNotification(player, "Internal Error", "The ATM card could not be added to your inventory. The fee has been refunded.")
+		return false
+	end
 
-	exports.hud:sendBottomNotification(source, "Maxime Du Trieux says:", "'Thank you,"..playerGender.."! Here is your ATM card (Card Number: '"..numSum.."', PIN: '0000').'")
+	local inserted = mysql:query_free("INSERT INTO atm_cards (card_owner, card_number, limit_type, card_type) VALUES ("
+		.. charID .. ", '" .. cardNumber .. "', " .. limitType .. ", 1)")
+	local saved = inserted and mysql:query_fetch_assoc("SELECT card_id FROM atm_cards WHERE card_owner = "
+		.. charID .. " AND card_number = '" .. cardNumber .. "' AND card_type = 1 LIMIT 1")
+	if not inserted or not saved or not saved.card_id then
+		if not exports["item-system"]:takeItem(player, 150, cardValue) then
+			outputDebugString("[BANK] Failed to remove unregistered ATM card item after insert failure for character #" .. charID, 1)
+		end
+		local refunded = exports.global:giveMoney(player, price)
+		local oldRestored = restoreOldCard()
+		if not refunded or not oldRestored then
+			outputDebugString("[BANK] CRITICAL: ATM card database insert rollback was incomplete for character #" .. charID, 1)
+			outputChatBox("ATM card creation rollback failed. Contact staff immediately.", player, 255, 0, 0)
+		end
+		exports.hud:sendBottomNotification(player, "SQL Error", "The ATM card could not be registered. The operation was rolled back.")
+		return false
+	end
 
-	--cooldown[source] = getTickCount()
+	triggerEvent("sendAme", player, "takes some dollar notes and gives them to Maxime Du Trieux.")
+	exports.global:sendLocalText(player, "* Maxime Du Trieux gives " .. tostring(playerName):gsub("_", " ") .. " a sleek plastic ATM card.", 255, 51, 102, 30, {}, true)
+	exports.hud:sendBottomNotification(player, "Maxime Du Trieux says:", "'Thank you, " .. playerGender .. "! Here is your ATM card (Card Number: '" .. cardNumber .. "', PIN: '0000').'")
+	return true
 end
 addEvent( "bank:applyForNewATMCard", true )
 addEventHandler( "bank:applyForNewATMCard", getRootElement(), applyForNewATMCard )
