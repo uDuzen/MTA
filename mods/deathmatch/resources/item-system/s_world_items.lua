@@ -795,49 +795,77 @@ end
 addEvent("moveItem", true)
 addEventHandler("moveItem", getRootElement(), moveItem)
 
-addEvent('item:move:save', true)
-addEventHandler('item:move:save', root,
-	function(x, y, z, rx, ry, rz)
-		local reset = function()
-			setElementPosition(source, getElementPosition(source))
-			setElementRotation(source, getElementRotation(source))
+addEvent("item:move:save", true)
+addEventHandler("item:move:save", root, function(x, y, z, rx, ry, rz)
+	local player = client
+	if not isElement(player) or getElementType(player) ~= "player"
+		or tonumber(getElementData(player, "loggedin")) ~= 1
+		or not isWorldItemObject(source) then return false end
+
+	x, y, z, rx, ry, rz = tonumber(x), tonumber(y), tonumber(z), tonumber(rx), tonumber(ry), tonumber(rz)
+	local function isFinite(value)
+		return value and value == value and value ~= math.huge and value ~= -math.huge
+	end
+	if not isFinite(x) or not isFinite(y) or not isFinite(z)
+		or not isFinite(rx) or not isFinite(ry) or not isFinite(rz)
+		or math.abs(x) > 3000 or math.abs(y) > 3000 or z < -100 or z > 2000
+		or math.abs(rx) > 360 or math.abs(ry) > 360 or math.abs(rz) > 360 then
+		return false
+	end
+
+	local object = source
+	local itemID = tonumber(getElementData(object, "itemID"))
+	local itemIndex = tonumber(getElementData(object, "id"))
+	if not itemID or not itemIndex or itemIndex < 1 or itemIndex ~= math.floor(itemIndex) then return false end
+
+	local oldX, oldY, oldZ = getElementPosition(object)
+	local oldRX, oldRY, oldRZ = getElementRotation(object)
+	local function reset()
+		if isElement(object) then
+			setElementPosition(object, oldX, oldY, oldZ)
+			setElementRotation(object, oldRX, oldRY, oldRZ)
 		end
-		--get int and dim from object
-		local dimension = getElementDimension(source)
-		local interior = getElementInterior(source)
-		--old method: if (exports.global:isStaffOnDuty(client) or exports.integration:isPlayerTrialAdmin(client) or exports.integration:isPlayerScripter(client)) or (getElementDimension(client) ~= 0 and hasItem(client, 4, getElementDimension(client)) or hasItem(client, 5, getElementDimension(client))) then
-		if (dimension < 20000 and interior > 0 and hasItem(client, 4, dimension)) or (dimension < 20000 and interior > 0 and hasItem(client, 5, dimension)) or (dimension > 20000 and interior > 0 and hasItem(client, 3, dimension-20000)) or (exports.integration:isPlayerTrialAdmin(client) and exports.global:isAdminOnDuty(client)) or (exports.integration:isPlayerScripter(client) and exports.global:isStaffOnDuty(client)) or (dimension == 0) or (interior == 0) then
-			if not canMove(client, source) then
-				outputChatBox("You can not move this item. Contact an admin via F1.", client, 255, 0, 0)
-				reset()
-				return
-			end
+	end
 
-			local itemID = getElementData(source, "itemID")
-			if itemID == 138 and not exports.integration:isPlayerAdmin(client) then
-				outputChatBox("Only a Lead+ admin can move this item.", client, 255, 0, 0)
-				reset()
-				return
-			end
+	local dimension = getElementDimension(object)
+	local interior = getElementInterior(object)
+	local ownsPropertyKey = (dimension < 20000 and interior > 0
+		and (hasItem(player, 4, dimension) or hasItem(player, 5, dimension)))
+		or (dimension > 20000 and interior > 0 and hasItem(player, 3, dimension - 20000))
+	local staffOverride = (exports.integration:isPlayerTrialAdmin(player) and exports.global:isAdminOnDuty(player))
+		or (exports.integration:isPlayerScripter(player) and exports.global:isStaffOnDuty(player))
+	if not ownsPropertyKey and not staffOverride and dimension ~= 0 and interior ~= 0 then
+		return false
+	end
 
-			if itemID == 139 and not exports.integration:isPlayerTrialAdmin(client) then
-				outputChatBox("Only a Super+ admin can move this item.", client, 255, 0, 0)
-				reset()
-				return
-			end
+	if not canMove(player, object) then
+		outputChatBox("You can not move this item. Contact an admin via F1.", player, 255, 0, 0)
+		reset()
+		return false
+	end
+	if itemID == 138 and not exports.integration:isPlayerAdmin(player) then
+		outputChatBox("Only a Lead+ admin can move this item.", player, 255, 0, 0)
+		reset()
+		return false
+	end
+	if itemID == 139 and not exports.integration:isPlayerTrialAdmin(player) then
+		outputChatBox("Only a Super+ admin can move this item.", player, 255, 0, 0)
+		reset()
+		return false
+	end
 
-
-			if mysql:query_free("UPDATE worlditems SET x = " .. x .. ", y = " .. y .. ", z = " .. z .. ", rx = " .. rx .. ", ry = " .. ry .. ", rz = " .. rz .. ", useExactValues = 1 WHERE id = " .. getElementData( source, "id" ) ) then
-				setElementPosition(source, x, y, z)
-				setElementData(source, "useExactValues", true)
-				setElementRotation(source, rx, ry, rz)
-
-				outputChatBox('Saved item position for item #' .. getElementData( source, 'id' ) .. '.', client, 0, 255, 0)
-			end
-		else
-			reset()
-		end
-	end)
+	if not mysql:query_free("UPDATE worlditems SET x = " .. x .. ", y = " .. y .. ", z = " .. z
+		.. ", rx = " .. rx .. ", ry = " .. ry .. ", rz = " .. rz
+		.. ", useExactValues = 1 WHERE id = " .. itemIndex .. " LIMIT 1") then
+		reset()
+		return false
+	end
+	setElementPosition(object, x, y, z)
+	exports.anticheat:changeProtectedElementDataEx(object, "useExactValues", true, false)
+	setElementRotation(object, rx, ry, rz)
+	outputChatBox("Saved item position for item #" .. itemIndex .. ".", player, 0, 255, 0)
+	return true
+end)
 
 local function rotateItem(item, rz)
 	local player = client or source
