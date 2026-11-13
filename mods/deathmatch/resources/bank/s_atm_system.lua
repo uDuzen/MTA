@@ -583,6 +583,10 @@ function withdrawATMMoneyPersonal(amount, theATM)
 		return false
 	end
 	local altCheck = areYouAltAlting(player, { cardOwner, cardNumber, owner.id })
+	if altCheck == nil then
+		triggerClientEvent(player, "bank:respondToPendingTransfer", player, "The card owner could not be verified. Please try again later.")
+		return false
+	end
 	if altCheck then
 		exports.global:sendMessageToAdmins("[BANK] " .. getPlayerName(player) .. " attempted an ATM withdrawal from an alternate character's card (" .. tostring(altCheck) .. ").")
 		triggerClientEvent(player, "bank:respondToPendingTransfer", player, "You cannot transfer money between your own characters.")
@@ -759,6 +763,10 @@ function transferATMMoneyToPersonal(theATM, amount, targetBankAccNo, reason)
 			return false
 		end
 		local altCheck = areYouAltAlting(player, { cardOwner, cardNumber, sender.id }, target.id)
+		if altCheck == nil then
+			triggerClientEvent(player, "bank:respondToPendingTransfer", player, "The recipient could not be verified. Please try again later.")
+			return false
+		end
 		if altCheck then
 			exports.global:sendMessageToAdmins("[BANK] " .. getPlayerName(player) .. " attempted an ATM transfer to an alternate character's card (" .. tostring(altCheck) .. ").")
 			triggerClientEvent(player, "bank:respondToPendingTransfer", player, "You cannot transfer money between your own characters.")
