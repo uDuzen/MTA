@@ -689,7 +689,11 @@ local function moveFromElement(element, slot, ammo, index)
 			end
 		elseif item[1] == -100 then
 			local faction = getElementData(source, "faction") or {}
-			local armor = math.max( 0, ( ( faction[1] or ( faction[3] and ( (faction[1].rank == 4 or faction[3].rank == 4) or (faction[1].rank == 5 or faction[3].rank == 5) or (faction[1].rank == 13 or faction[3].rank == 13) ) ) ) and 100 or 50 ) - math.ceil( getPedArmor( source ) ) )
+			local rank1 = type(faction[1]) == "table" and tonumber(faction[1].rank) or 0
+			local rank3 = type(faction[3]) == "table" and tonumber(faction[3].rank) or 0
+			local hasFullArmorPerk = rank1 == 4 or rank1 == 5 or rank1 == 13 or rank3 == 4 or rank3 == 5 or rank3 == 13
+			local maxArmor = hasFullArmorPerk and 100 or 50
+			local armor = math.max(0, maxArmor - math.ceil(getPedArmor(source)))
 
 			if armor == 0 then
 				outputChatBox( "You can't wear any more armor.", source, 255, 0, 0 )
