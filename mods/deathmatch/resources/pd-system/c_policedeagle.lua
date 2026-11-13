@@ -60,7 +60,6 @@ function weaponFire(weapon, ammo, ammoInClip, hitX, hitY, hitZ, hitElement)
 				fxAddSparks(hitX, hitY, hitZ, 1, 1, 1, 1, 10, 0, 0, 0, true, 3, 1)
 			end
 			playSoundFrontEnd(38)
-			triggerServerEvent("tazerFired", localPlayer, hitX, hitY, hitZ, hitElement)
 		end
 	end
 end
