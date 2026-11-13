@@ -140,6 +140,8 @@ function updateFare(newFare)
 		or getElementType(theVehicle) ~= "vehicle"
 		or not taxiModels[getElementModel(theVehicle)]
 		or getVehicleController(theVehicle) ~= driver
+		or getElementData(theVehicle, "taximeter.running") == true
+		or (tonumber(getElementData(theVehicle, "taximeter.distance")) or 0) > 0
 		or not newFare or newFare ~= newFare or newFare == math.huge or newFare == -math.huge
 		or newFare < minFare or newFare > maxFare then
 		return false
@@ -161,7 +163,8 @@ function resetMeter()
 	if not driver or not isElement(driver) then return false end
 	local theVehicle = getPedOccupiedVehicle(driver)
 	if not isElement(theVehicle) or not taxiModels[getElementModel(theVehicle)]
-		or getVehicleController(theVehicle) ~= driver then return false end
+		or getVehicleController(theVehicle) ~= driver
+		or getElementData(theVehicle, "taximeter.running") == true then return false end
 	local x, y, z = getElementPosition(theVehicle)
 	taximeterPositions[theVehicle] = { x, y, z }
 	setElementData(theVehicle, "taximeter.distance", 0)
