@@ -13,13 +13,14 @@ dutyAllowChanges = { }
 function adminSetPlayerFaction(thePlayer, commandName, partialNick, factionID)
 	if exports.integration:isPlayerTrialAdmin(thePlayer) or exports.integration:isPlayerFMTLeader(thePlayer) then
 		factionID = tonumber(factionID)
-		if not partialNick or not factionID or factionID < 1 or factionID ~= math.floor(factionID) then
+		if not partialNick or not factionID or (factionID ~= -1 and (factionID < 1 or factionID ~= math.floor(factionID))) then
 			outputChatBox("SYNTAX: /" .. commandName .. " [Player Partial Name/ID] [Faction ID]", thePlayer, 255, 194, 14)
 		else
 			local targetPlayer, targetPlayerNick = exports.global:findPlayerByPartialNick(thePlayer, partialNick)
 
 			if targetPlayer then
-				local defaultRank = getDefaultRank(factionID)
+				local defaultRank = tonumber(getDefaultRank(factionID))
+				if not defaultRank or defaultRank < 1 then return false end
 				local theTeam = exports.pool:getElement("team", factionID)
 				if not theTeam then
 					outputChatBox("Invalid Faction ID.", thePlayer, 255, 0, 0)
@@ -123,7 +124,8 @@ function adminSetFactionLeader(thePlayer, commandName, partialNick, factionID)
 			local targetPlayer, targetPlayerNick = exports.global:findPlayerByPartialNick(thePlayer, partialNick)
 
 			if targetPlayer then
-				local theRank = getLeaderRank(factionID)
+				local theRank = tonumber(getLeaderRank(factionID))
+				if not theRank or theRank < 1 then return false end
 				local theTeam = exports.pool:getElement("team", factionID)
 				if not theTeam then
 					outputChatBox("Invalid Faction ID.", thePlayer, 255, 0, 0)
@@ -185,14 +187,14 @@ function adminSetFactionRank(thePlayer, commandName, partialNick, factionID, ...
 			end
 			if targetPlayer then
 				local theTeam = exports.pool:getElement("team", factionID)
-				if not isPlayerInFaction(targetPlayer, factionID) then
-					outputChatBox("Player is not in this faction.", thePlayer, 255, 0, 0)
-					return
+				local factionInfo = getElementData(targetPlayer, "faction")
+				if not isElement(theTeam) or not isPlayerInFaction(targetPlayer, factionID)
+					or type(factionInfo) ~= "table" or type(factionInfo[factionID]) ~= "table" then
+					outputChatBox("Player is not in this faction or faction data is unavailable.", thePlayer, 255, 0, 0)
+					return false
 				end
 
 				if dbExec(exports.mysql:getConn("mta"), "UPDATE characters_faction SET faction_rank =? WHERE character_id = ? AND faction_id=?", rankID, getElementData(targetPlayer, "dbid"), factionID) then
-					local factionInfo = getElementData(targetPlayer, "faction")
-					if type(factionInfo) ~= "table" or type(factionInfo[factionID]) ~= "table" then return false end
 					factionInfo[factionID].rank = rankID
 					exports.anticheat:changeProtectedElementDataEx(targetPlayer, "faction", factionInfo, true)
 
@@ -271,7 +273,7 @@ function setFactionBudget(thePlayer, commandName, factionID, amount)
 	local isInFaction, rank = isPlayerInFaction(thePlayer, 3)
 	if isInFaction and rank >= 15 then
 		local amount = tonumber( amount )
-		if not factionID or not amount or amount < 0 then
+		if not factionID or not amount or amount ~= amount or amount == math.huge or amount < 0 or amount > 1000000 then
 			outputChatBox("SYNTAX: /" .. commandName .. " [Faction ID] [Money]", thePlayer, 255, 194, 14)
 		else
 			factionID = tonumber(factionID)
