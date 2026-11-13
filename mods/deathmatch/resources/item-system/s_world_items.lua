@@ -265,19 +265,12 @@ function dropItem(itemID, x, y, z, ammo, keepammo, cancelAnim)
 					return
 				end
 			elseif itemID == 134 then
-				if not exports.global:takeMoney(source, itemValue) then
-					outputDebugString(getPlayerName(source) .. ' (' .. getPlayerSerial(source) .. ') tried dropping money he doesnt have')
-
-					while exports['item-system']:takeItem(source, 134) do
-					end
-
-					local amount = exports.global:getMoney(source)
-					if amount > 0 then
-						exports.global:giveItem(source, 134, amount)
-					end
-
-					triggerClientEvent( source, "finishItemDrop", source )
-					return
+				local moneyRemoved = exports.global:takeMoney(source, itemValue)
+				if not moneyRemoved then
+					outputDebugString("[item-system] Rejected cash drop because the player's money transaction failed: " .. getPlayerName(source), 2)
+					outputChatBox("Your cash could not be deducted. The drop was cancelled and your balance was left unchanged.", source, 255, 0, 0)
+					triggerClientEvent(source, "finishItemDrop", source)
+					return false
 				end
 			elseif (itemID == 147) then -- Picture Frame
 				local dimension = getElementDimension(source)
