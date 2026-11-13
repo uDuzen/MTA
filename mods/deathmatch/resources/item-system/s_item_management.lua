@@ -357,7 +357,11 @@ end
 
 -- takes an item from the element
 function takeItem(element, itemID, itemValue)
-	local success, error = loadItems( element )
+	itemID = tonumber(itemID)
+	if not itemID or itemID < 1 or itemID ~= math.floor(itemID) then
+		return false, "Invalid item ID"
+	end
+	local success, error = loadItems(element)
 	if success then
 		local success, slot = hasItem(element, itemID, itemValue)
 		if success then
@@ -411,10 +415,15 @@ end
 
 -- updates the item value
 function updateItemValue(element, slot, itemValue)
-	local success, error = loadItems( element )
+	if itemValue == nil or (type(itemValue) ~= "string" and type(itemValue) ~= "number")
+		or type(slot) ~= "number" or slot < 1 or slot ~= math.floor(slot) then
+		return false, "Invalid item value or slot"
+	end
+	itemValue = tonumber(itemValue) or tostring(itemValue)
+	if #tostring(itemValue) > 1024 then return false, "Item value is too long" end
+	local success, error = loadItems(element)
 	if success then
 		if saveditems[element][slot] then
-			local itemValue = tonumber(itemValue) or tostring(itemValue)
 			if itemValue then
 				local itemIndex = saveditems[element][slot][3]
 				local updated = dbExec(exports.mysql:getConn('mta'), "UPDATE items SET itemValue=? WHERE `index`=? ", itemValue, itemIndex)
@@ -453,7 +462,21 @@ function updateMetadata(element, slot, key, value)
 	if success then
 		local item = saveditems[element][slot]
 		if item and canOpenMetadataEditor(element, item) then
-			local metadata = item[5]
+			local metadata = {}
+			if type(item[5]) == "table" then
+				for metadataKey, metadataValue in pairs(item[5]) do
+					metadata[metadataKey] = metadataValue
+				end
+			end
+			if type(metadata.edited) == "table" then
+				local editedCopy = {}
+				for editedKey, editedValue in pairs(metadata.edited) do
+					editedCopy[editedKey] = editedValue
+				end
+				metadata.edited = editedCopy
+			else
+				metadata.edited = {}
+			end
 
 			local def = getEditableMetadataInfo(element, item[1], key)
 			if not def then
@@ -478,10 +501,7 @@ function updateMetadata(element, slot, key, value)
 				metadata[key] = value
 			end
 			
-			if not metadata['edited'] then
-				metadata['edited'] = {}
-			end
-			metadata['edited'][key] = true
+			metadata.edited[key] = true
 
 			local any = false
 			for _, _ in pairs(metadata) do
