@@ -23,8 +23,10 @@ function setElementDataEx(theElement, theParameter, theValue, syncToClient, noSy
 		theValue = tonumber(theValue)
 	end
 	
-	exports.anticheat:changeProtectedElementDataEx(theElement, theParameter, theValue, syncToClient, noSyncAtall)
-	return true
+	if exports.anticheat:changeProtectedElementDataEx(theElement, theParameter, theValue, syncToClient, noSyncAtall) then
+		return true
+	end
+	return setElementData(theElement, theParameter, theValue, syncToClient)
 end
 
 
@@ -60,47 +62,75 @@ addEventHandler( "bank:showGeneralServiceGUI", getRootElement(), showGeneralServ
 
 function withdrawMoneyPersonal(amount)
 	amount = validateBankAmount(amount)
-	if not client or not amount then return false end
-	local state = tonumber(getElementData(client, "loggedin")) or 0
-	if (state == 0) then
-		return
+	local player = client
+	if not player or not amount or tonumber(getElementData(player, "loggedin")) ~= 1 then return false end
+	local characterID = tonumber(getElementData(player, "dbid"))
+	local oldBalance = tonumber(getElementData(player, "bankmoney")) or 0
+	if not characterID or characterID < 1 then return false end
+	local newBalance = oldBalance - amount
+	if newBalance < 0 then
+		outputChatBox("Insufficient funds in your personal bank account.", player, 255, 0, 0)
+		return false
 	end
-	
-	local balance = tonumber(getElementData(client, "bankmoney")) or 0
-	local money = balance - amount
-	if money >= 0 then
-		if not exports.global:giveMoney(client, amount, true) then return false end
-		setElementDataEx(client, "bankmoney", money, true)
-		saveBank(client)
-		
-		mysql:query_free("INSERT INTO wiretransfers (`from`, `to`, `amount`, `reason`, `type`) VALUES (" .. mysql:escape_string(getElementData(client, "dbid")) .. ", 0, " .. mysql:escape_string(amount) .. ", '', 0)" )
 
-		outputChatBox("You withdrew $" .. exports.global:formatMoney(amount) .. " from your personal account.", client, 255, 194, 14)
-		exports.logs:dbLog(client, 25, client, "WITHDRAW " .. amount.. " - REMAINING $"..money)
-	else
-		outputChatBox( "No.", client, 255, 0, 0 )
+	if not exports.global:giveMoney(player, amount, true) then return false end
+	if not setElementDataEx(player, "bankmoney", newBalance, true) then
+		if not exports.global:takeMoney(player, amount, nil, true) then
+			outputDebugString("[BANK] Failed to roll back cash after personal withdrawal element-data failure for " .. getPlayerName(player), 1)
+		end
+		return false
 	end
+	if not saveBank(player) then
+		setElementDataEx(player, "bankmoney", oldBalance, true)
+		if not exports.global:takeMoney(player, amount, nil, true) then
+			outputDebugString("[BANK] Failed to roll back cash after personal withdrawal database failure for " .. getPlayerName(player), 1)
+			outputChatBox("Bank withdrawal could not be saved and its cash rollback failed. Contact staff immediately.", player, 255, 0, 0)
+		end
+		return false
+	end
+
+	mysql:query_free("INSERT INTO wiretransfers (`from`, `to`, amount, reason, type) VALUES ("
+		.. characterID .. ", 0, " .. amount .. ", '', 0)")
+	outputChatBox("You withdrew $" .. exports.global:formatMoney(amount) .. " from your personal account.", player, 255, 194, 14)
+	exports.logs:dbLog(player, 25, player, "WITHDRAW " .. amount .. " - REMAINING $" .. newBalance)
+	return true
 end
 addEvent("withdrawMoneyPersonal", true)
 addEventHandler("withdrawMoneyPersonal", getRootElement(), withdrawMoneyPersonal)
 
 function depositMoneyPersonal(amount)
 	amount = validateBankAmount(amount)
-	if not client or not amount then return false end
-	local state = tonumber(getElementData(client, "loggedin")) or 0
-	if (state == 0) then
-		return
+	local player = client
+	if not player or not amount or tonumber(getElementData(player, "loggedin")) ~= 1 then return false end
+	local characterID = tonumber(getElementData(player, "dbid"))
+	local oldBalance = tonumber(getElementData(player, "bankmoney")) or 0
+	if not characterID or characterID < 1 or oldBalance + amount > 2000000000 then return false end
+	local newBalance = oldBalance + amount
+
+	if not exports.global:takeMoney(player, amount, nil, true) then
+		outputChatBox("You don't have enough available cash to deposit.", player, 255, 194, 14)
+		return false
 	end
-	if exports.global:takeMoney(client, amount, nil, true) then
-			local money = tonumber(getElementData(client, "bankmoney")) or 0
-			setElementDataEx(client, "bankmoney", money + amount, true)
-			saveBank(client)
-			mysql:query_free("INSERT INTO wiretransfers (`from`, `to`, `amount`, `reason`, `type`) VALUES (0, " .. mysql:escape_string(getElementData(client, "dbid")) .. ", " .. mysql:escape_string(amount) .. ", '', 1)" )
-			outputChatBox("You deposited $" .. exports.global:formatMoney(amount) .. " into your personal account.", client, 255, 194, 14)
-			exports.logs:dbLog(client, 25, client, "DEPOSIT " .. amount.. " - REMAINING $"..money+amount)
-	else
-		outputChatBox("You don't have that amount in one sorted money item.", client, 255, 194, 14)
+	if not setElementDataEx(player, "bankmoney", newBalance, true) then
+		if not exports.global:giveMoney(player, amount, true) then
+			outputDebugString("[BANK] Failed to refund cash after personal deposit element-data failure for " .. getPlayerName(player), 1)
+		end
+		return false
 	end
+	if not saveBank(player) then
+		setElementDataEx(player, "bankmoney", oldBalance, true)
+		if not exports.global:giveMoney(player, amount, true) then
+			outputDebugString("[BANK] Failed to refund cash after personal deposit database failure for " .. getPlayerName(player), 1)
+			outputChatBox("Bank deposit could not be saved and the cash refund failed. Contact staff immediately.", player, 255, 0, 0)
+		end
+		return false
+	end
+
+	mysql:query_free("INSERT INTO wiretransfers (`from`, `to`, amount, reason, type) VALUES (0, "
+		.. characterID .. ", " .. amount .. ", '', 1)")
+	outputChatBox("You deposited $" .. exports.global:formatMoney(amount) .. " into your personal account.", player, 255, 194, 14)
+	exports.logs:dbLog(player, 25, player, "DEPOSIT " .. amount .. " - REMAINING $" .. newBalance)
+	return true
 end
 addEvent("depositMoneyPersonal", true)
 addEventHandler("depositMoneyPersonal", getRootElement(), depositMoneyPersonal)
