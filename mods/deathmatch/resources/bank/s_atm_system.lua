@@ -276,6 +276,12 @@ function applyForNewATMCard(replacingOldATMCard, limitType)
 	local saved = inserted and mysql:query_fetch_assoc("SELECT card_id FROM atm_cards WHERE card_owner = "
 		.. charID .. " AND card_number = '" .. cardNumber .. "' AND card_type = 1 LIMIT 1")
 	if not inserted or not saved or not saved.card_id then
+		if inserted then
+			if not mysql:query_free("DELETE FROM atm_cards WHERE card_owner = " .. charID
+				.. " AND card_number = '" .. cardNumber .. "' AND card_type = 1 LIMIT 1") then
+				outputDebugString("[BANK] Failed to remove an unverified ATM card database row for character #" .. charID, 1)
+			end
+		end
 		if not exports["item-system"]:takeItem(player, 150, cardValue) then
 			outputDebugString("[BANK] Failed to remove unregistered ATM card item after insert failure for character #" .. charID, 1)
 		end
@@ -808,8 +814,10 @@ function transferATMMoneyToPersonal(theATM, amount, targetBankAccNo, reason)
 	local targetLabel = targetFaction and getTeamName(targetFaction):gsub("_", " ") or (targetName or "Unknown")
 	local atmName = getATMName(theATM)
 	local destinationAccountID = targetFaction and -targetID or targetID
+	local destinationCardNumber
+	if not targetFaction then destinationCardNumber = targetBankAccNo end
 	addBankTransactionLog(sender.id, destinationAccountID, amount, 2, reason,
-		"Transferred from " .. atmName, cardNumber, targetFaction and nil or targetBankAccNo)
+		"Transferred from " .. atmName, cardNumber, destinationCardNumber)
 	exports.logs:dbLog(player, 25, player,
 		"TRANSFERRED $" .. amount .. " FROM (" .. sender.name .. ", " .. cardNumber .. ") TO (" .. targetLabel .. ") REASON (" .. reason .. ", " .. atmName .. ")")
 	triggerClientEvent(player, "bank:respondToPendingTransfer", player,
