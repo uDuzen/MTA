@@ -29,6 +29,7 @@ function getStaffInfo(username, error)
 			local changelogs = {}
 			local mQuery1 = nil
 			mQuery1 = mysql:query("SELECT (CASE WHEN to_rank>from_rank THEN 1 ELSE 0 END) AS promoted, s.id, s.userid, team, from_rank, to_rank, s.`by` AS `by`, details, DATE_FORMAT(date,'%b %d, %Y %h:%i %p') AS date FROM staff_changelogs s WHERE s.userid="..result[1]["id"].." ORDER BY id DESC")
+			if mQuery1 then
 			while true do
 				local row = mysql:fetch_assoc(mQuery1)
 				if not row then break end
@@ -37,11 +38,12 @@ function getStaffInfo(username, error)
 				table.insert(changelogs, row )
 			end
 			mysql:free_result(mQuery1)
+			end
 			local staffInfo = {}
 			staffInfo.user = result[1]
 			staffInfo.changelogs = changelogs
 			staffInfo.error = error1
-			triggerClientEvent(thePlayer, "openStaffManager", thePlayer, staffInfo)
+			if isElement(thePlayer) then triggerClientEvent(thePlayer, "openStaffManager", thePlayer, staffInfo) end
 		end
 	end, {username, error, thePlayer}, exports.mysql:getConn("core"), "SELECT id, username, admin, supporter, vct, scripter, mapper, fmt FROM accounts WHERE username=?", username)
 end
@@ -64,9 +66,9 @@ function getTeamsData()
 						if not users[i] then users[i] = {} end
 						-- fetch report count
 						local reportsQuery = dbQuery(exports.mysql:getConn("mta"), "SELECT adminreports FROM account_details WHERE account_id = ?", row.id)
-						local reportsResult = dbPoll(reportsQuery, -1)
+						local reportsResult = reportsQuery and dbPoll(reportsQuery, 10000) or nil
 						row.adminreports = (type(reportsResult) == "table" and reportsResult[1] and tonumber(reportsResult[1].adminreports)) or 0
-						dbFree(reportsQuery)
+						if reportsQuery then dbFree(reportsQuery) end
 						--
 						if tonumber(row.admin) > 0 and i == 1 then
 							if not row.rank then row.rank = {} end
