@@ -109,8 +109,8 @@ function previewPaintjob( veh, paintjob )
 			if currentTimer and isTimer(currentTimer) then
 				killTimer(currentTimer)
 			end
-			local newTimer = setTimer(endColorPreview, 45000, 1, veh)
-			exports.anticheat:changeProtectedElementDataEx( veh, "job:ppreviewtimer", newTimer, false )
+			local newTimer = setTimer(endPaintjobPreview, 45000, 1, veh)
+			exports.anticheat:changeProtectedElementDataEx(veh, "job:ppreviewtimer", newTimer, false)
 		end
 	end
 end
