@@ -65,7 +65,7 @@ function getTeamsData()
 						-- fetch report count
 						local reportsQuery = dbQuery(exports.mysql:getConn("mta"), "SELECT adminreports FROM account_details WHERE account_id = ?", row.id)
 						local reportsResult = dbPoll(reportsQuery, -1)
-						row.adminreports = (reportsResult[1] and reportsResult[1].adminreports) or 0
+						row.adminreports = (type(reportsResult) == "table" and reportsResult[1] and tonumber(reportsResult[1].adminreports)) or 0
 						dbFree(reportsQuery)
 						--
 						if tonumber(row.admin) > 0 and i == 1 then
@@ -118,6 +118,7 @@ function getChangelogs()
 	local changelogs = {}
 	local mQuery1 = nil
 	mQuery1 = mysql:query("SELECT (CASE WHEN to_rank>from_rank THEN 1 ELSE 0 END) AS promoted, s.id, s.userid, team, from_rank, to_rank, s.`by` AS `by`, details, DATE_FORMAT(date,'%b %d, %Y %h:%i %p') AS date FROM staff_changelogs s ORDER BY id DESC")
+	if not mQuery1 then return false end
 	while true do
 		local row = mysql:fetch_assoc(mQuery1)
 		if not row then break end
@@ -145,11 +146,19 @@ function editStaff(userid, ranks, details)
 		[5] = exports.integration:isPlayerSeniorAdmin(thePlayer) or exports.integration:isPlayerMappingTeamLeader(thePlayer),
 		[6] = exports.integration:isPlayerSeniorAdmin(thePlayer)
 	}
+	staffTitles = exports.integration:getStaffTitles()
 	for teamID, rankValue in pairs(ranks) do
 		local team = tonumber(teamID)
 		local rank = tonumber(rankValue)
+		local titleTable = team and staffTitles[team]
+		local maxRank = 0
+		if type(titleTable) == "table" then
+			for titleRank in pairs(titleTable) do
+				if tonumber(titleRank) and tonumber(titleRank) > maxRank then maxRank = tonumber(titleRank) end
+			end
+		end
 		if not team or team < 1 or team > 6 or team ~= math.floor(team)
-			or not rank or rank < 0 or rank > 20 or rank ~= math.floor(rank) then
+			or not rank or rank < 0 or rank > maxRank or rank ~= math.floor(rank) then
 			return false
 		end
 		ranks[team] = rank
@@ -168,9 +177,11 @@ function editStaff(userid, ranks, details)
 			break
 		end
 	end
-	staffTitles = exports.integration:getStaffTitles()
+	local adminAccountID = tonumber(getElementData(thePlayer, "account:id"))
+	if not adminAccountID or adminAccountID < 1 then return false end
 	dbQuery(function(qh, userid, staffTitles, target, userid, ranks, details, thePlayer)
 		local result = dbPoll(qh, 0)
+		if not isElement(thePlayer) then return false end
 		if result and result[1] then
 			local user = result[1]
 			local currentRanks = {
@@ -195,7 +206,7 @@ function editStaff(userid, ranks, details)
 			end
 			if ranks[1] and ranks[1] ~= tonumber(user.admin) then
 				tail = tail.."admin="..ranks[1]..","
-				mysql:query_free("INSERT INTO staff_changelogs SET userid="..userid..", details="..details..", `by`="..getElementData(thePlayer, "account:id")..", team=1, from_rank="..user.admin..", to_rank="..ranks[1])
+				mysql:query_free("INSERT INTO staff_changelogs SET userid="..userid..", details="..details..", `by`="..adminAccountID..", team=1, from_rank="..user.admin..", to_rank="..ranks[1])
 				exports.global:sendMessageToStaff("[STAFF UPDATE] "..exports.global:getPlayerFullIdentity(thePlayer, 1, true).." has "..(ranks[1] > tonumber(user.admin) and "promoted" or "demoted").." '"..user.username.."' from "..staffTitles[1][tonumber(user.admin)].." to "..staffTitles[1][ranks[1]]..".", true)
 				exports.announcement:makePlayerNotification(target or user.id, "Staff Rank Updated", exports.global:getPlayerFullIdentity(thePlayer, 1, true).." has "..(ranks[1] > tonumber(user.admin) and "promoted" or "demoted").." you from "..staffTitles[1][tonumber(user.admin)].." to "..staffTitles[1][ranks[1]]..". \n" .. (ranks[1] > tonumber(user.admin) and "Congratulations!" or "Sorry!"))
 				if target then exports.anticheat:changeProtectedElementDataEx(target, "admin_level", ranks[1], true) end
