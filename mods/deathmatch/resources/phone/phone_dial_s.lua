@@ -422,14 +422,18 @@ addEventHandler("phone:acceptPhoneCall", root, acceptPhoneCall)
 function takeCallCost(cost, fromNumber, duration)
 	local player = client
 	local session = player and callSessions[player]
-	if not player or not isElement(player) or not session or session.charged
-		or not isElement(session.caller) then return false end
-	local elapsed = math.max(0, math.floor(((session.ended or getTickCount()) - session.started) / 1000))
-	local actualCost = math.min(5000, math.ceil(elapsed * 0.305))
-	session.charged = true
+	if not player or not isElement(player) or getElementType(player) ~= "player"
+		or not session or session.charged or not session.ended
+		or not isElement(session.caller) or not isElement(session.callee) then
+		return false
+	end
 	local caller = session.caller
 	local callerID = tonumber(getElementData(caller, "dbid"))
-	if not callerID then return false end
+	if not callerID or callerID < 1 then return false end
+	local elapsed = math.max(0, math.floor((session.ended - session.started) / 1000))
+	local actualCost = math.min(5000, math.ceil(elapsed * 0.305))
+	-- Mark the session only after all preconditions have passed.
+	session.charged = true
 	if actualCost > 0 then
 		local foundFaction
 		for _, faction in ipairs(getElementsByType("team")) do
