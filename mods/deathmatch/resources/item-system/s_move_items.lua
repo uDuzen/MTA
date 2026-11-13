@@ -142,7 +142,7 @@ local function moveToElement(element, slot, ammo, event)
 				local hoursPlayedFrom = tonumber(getElementData(source, "hoursplayed")) or 99
 				local hoursPlayedTo = 99
 				if isElement(element) and getElementType(element) == "player" then
-					hoursPlayedTo = getElementData( element, "hoursplayed" )
+					hoursPlayedTo = tonumber(getElementData(element, "hoursplayed")) or 99
 				end
 
 				if not exports.global:isStaffOnDuty(source) and not exports.global:isStaffOnDuty(element) then
@@ -403,24 +403,33 @@ local function moveToElement(element, slot, ammo, event)
 				if slot == -100 then
 					local ammo = math.ceil( getPedArmor( source ) )
 					if ammo > 0 then
-						setPedArmor( source, 0 )
-						giveItem( element, slot, ammo )
-						exports.logs:dbLog(source, 39, source, getPlayerName(source) .. " moved " .. getItemName(slot) " - " .. ammo .. " #" .. getElementID(element) )
-						output(source, element, -100)
+						if giveItem(element, slot, ammo) then
+							setPedArmor(source, 0)
+							exports.logs:dbLog(source, 39, source, getPlayerName(source) .. " moved " .. getItemName(slot) .. " - " .. ammo .. " #" .. getElementID(element))
+							output(source, element, -100)
+						end
 					end
 				else
 					local getCurrentMaxAmmo = exports.global:getWeaponCount(source, slot)
 					if ammo > getCurrentMaxAmmo then
 						exports.global:sendMessageToAdmins("[items\moveToElement] Possible duplication of gun from '"..getPlayerName(source).."' // " .. getItemName( -slot ) )
-						exports.logs:dbLog(source, 39, source, getPlayerName(source) .. " moved " .. getItemName(-slot) " -  #" .. getElementID(element) .. " - BLOCKED DUE POSSIBLE DUPING" )
+						exports.logs:dbLog(source, 39, source, getPlayerName(source) .. " moved " .. getItemName(-slot) .. " -  #" .. getElementID(element) .. " - BLOCKED DUE POSSIBLE DUPING" )
 						triggerClientEvent( source, event or "finishItemMove", source )
 						return
 					end
-					exports.global:takeWeapon( source, slot )
 					if ammo > 0 then
-						giveItem( element, -slot, ammo )
-						exports.logs:dbLog(source, 39, source, getPlayerName(source) .. " moved " .. getItemName(-slot) " - " .. ammo .. " #" .. getElementID(element) )
-						output(source, element, -slot)
+						if not exports.global:takeWeapon(source, slot) then
+							return false
+						end
+						if giveItem(element, -slot, ammo) then
+							exports.logs:dbLog(source, 39, source, getPlayerName(source) .. " moved " .. getItemName(-slot) .. " - " .. ammo .. " #" .. getElementID(element))
+							output(source, element, -slot)
+						else
+							exports.global:giveWeapon(source, slot, ammo)
+							outputChatBox("Ammunition could not be stored; your weapon was restored.", source, 255, 0, 0)
+						end
+					else
+						exports.global:takeWeapon(source, slot)
 					end
 				end
 			end
@@ -575,15 +584,16 @@ local function moveFromElement(element, slot, ammo, index)
 		-- ANTI ALT-ALT FOR NON AMMO ITEMS, CHECK THIS FUNCTION FOR AMMO ITEM BELOW AND FOR WORLD ITEM CHECK s_world_items.lua
 		--31 -> 43  = DRUGS
 		if ( (item[1] >= 31 and item[1] <= 43) or itemBannedByAltAltChecker[item[1]]) and not (getElementModel(element) == 2942 and item[1] == 150) then
-			local hoursPlayedTo = nil
+			local hoursPlayedTo = 99
 
 			if isElement(source) and getElementType(source) == "player" then
-				hoursPlayedTo = getElementData( source, "hoursplayed" )
+				hoursPlayedTo = tonumber(getElementData(source, "hoursplayed")) or 99
 			end
 
 			if not exports.global:isStaffOnDuty(source) and not exports.global:isStaffOnDuty(element) then
 				if hoursPlayedTo < 10 then
-					if not (item[1] == 3 and getElementData(exports.pool:getElement("vehicle", item[2]), "owner") == getElementData(source, "dbid")) then -- Checks if they own the vehicle for the key
+					local keyVehicle = item[1] == 3 and exports.pool:getElement("vehicle", item[2]) or false
+					if not (isElement(keyVehicle) and tonumber(getElementData(keyVehicle, "owner")) == tonumber(getElementData(source, "dbid"))) then -- Checks if they own the vehicle for the key
 						outputChatBox("You require 10 hours of playing time to receive a "..getItemName( item[1] ).." from a "..name..".", source, 255, 0, 0)
 						triggerClientEvent( source, "forceElementMoveUpdate", source )
 						triggerClientEvent( source, "finishItemMove", source )
@@ -644,33 +654,43 @@ local function moveFromElement(element, slot, ammo, index)
 				end
 			end
 		elseif item[1] == -100 then
-			local faction = getElementData( source, "faction" )
+			local faction = getElementData(source, "faction") or {}
 			local armor = math.max( 0, ( ( faction[1] or ( faction[3] and ( (faction[1].rank == 4 or faction[3].rank == 4) or (faction[1].rank == 5 or faction[3].rank == 5) or (faction[1].rank == 13 or faction[3].rank == 13) ) ) ) and 100 or 50 ) - math.ceil( getPedArmor( source ) ) )
 
 			if armor == 0 then
 				outputChatBox( "You can't wear any more armor.", source, 255, 0, 0 )
 			else
-				output( element, source, item[1], nil, nil, item[5])
-				takeItemFromSlot( element, slot )
-
-				local leftover = math.max( 0, item[2] - armor )
+				if not takeItemFromSlot(element, slot) then
+					outputChatBox("The armor item could not be removed from storage.", source, 255, 0, 0)
+					return false
+				end
+				output(element, source, item[1], nil, nil, item[5])
+				local itemArmor = tonumber(item[2]) or 0
+				local leftover = math.max(0, itemArmor - armor)
 				if leftover > 0 then
 					giveItem( element, item[1], leftover )
 				end
 
-				setPedArmor( source, math.ceil( getPedArmor( source ) + math.min( item[2], armor ) ) )
+				setPedArmor(source, math.ceil(getPedArmor(source) + math.min(itemArmor, armor)))
 				exports.logs:dbLog(source, 39, source, name .. " #" .. getElementID(element) .. "->" .. getPlayerName( source ) .. " - " .. getItemName( item[1], item[2], item[5] ) .. " - " .. ( math.min( item[2], armor ) ))
 			end
 			triggerClientEvent( source, "forceElementMoveUpdate", source )
 		else
-			takeItemFromSlot( element, slot )
-			output( element, source, item[1], nil, nil, item[5])
-			if ammo < item[2] then
-				exports.global:giveWeapon( source, -item[1], ammo )
-				giveItem( element, item[1], item[2] - ammo )
+			local itemAmmo = tonumber(item[2]) or 0
+			if not takeItemFromSlot(element, slot) then
+				outputChatBox("The ammunition item could not be removed from storage.", source, 255, 0, 0)
+				return false
+			end
+			output(element, source, item[1], nil, nil, item[5])
+			if ammo < itemAmmo then
+				if not exports.global:giveWeapon(source, -item[1], ammo) then
+					giveItem(element, item[1], itemAmmo)
+					return false
+				end
+				giveItem(element, item[1], itemAmmo - ammo)
 				exports.logs:dbLog(source, 39, source, name .. " #" .. getElementID(element) .. "->" .. getPlayerName( source ) .. " - " .. getItemName( item[1], item[2], item[5] ) .. " - " .. ( item[2] - ammo ))
 			else
-				exports.global:giveWeapon( source, -item[1], item[2] )
+				if not exports.global:giveWeapon(source, -item[1], itemAmmo) then giveItem(element, item[1], itemAmmo); return false end
 				exports.logs:dbLog(source, 39, {source, element}, name .. " #" .. getElementID(element) .. "->" .. getPlayerName( source ) .. " - " .. getItemName( item[1], item[2], item[5] ) .. " - " .. item[2])
 			end
 			triggerClientEvent( source, "forceElementMoveUpdate", source )
