@@ -622,6 +622,7 @@ addEventHandler( "moveWorldItemToElement", getRootElement(), moveWorldItemToElem
 local function moveFromElement(element, slot, ammo, index)
 	if not client or not isElement(element) then return false end
 	local source = client
+	local function finishMove() triggerClientEvent(source, "finishItemMove", source) end
 	slot = tonumber(slot)
 	if not slot or slot < 1 or slot ~= math.floor(slot) then
 		triggerClientEvent(source, "finishItemMove", source)
@@ -631,7 +632,8 @@ local function moveFromElement(element, slot, ammo, index)
 		return outputDebugString("[ITEM] moveFromElement / Disabled ")
 	end
 
-	if not canAccessElement( source, element ) then
+	if not canAccessElement(source, element) then
+		finishMove()
 		return false
 	end
 	local inventory = getItems(element)
@@ -642,7 +644,8 @@ local function moveFromElement(element, slot, ammo, index)
 	end
 	if not canPickup(source, item) then
 		outputChatBox("You can not move this item. Contact an admin via F1.", source, 255, 0, 0)
-		return
+		finishMove()
+		return false
 	end
 	if item[1] < 0 and item[1] ~= -100 then
 		ammo = tonumber(ammo)
@@ -670,7 +673,7 @@ local function moveFromElement(element, slot, ammo, index)
 					if not (isElement(keyVehicle) and tonumber(getElementData(keyVehicle, "owner")) == tonumber(getElementData(source, "dbid"))) then -- Checks if they own the vehicle for the key
 						outputChatBox("You require 10 hours of playing time to receive a "..getItemName( item[1] ).." from a "..name..".", source, 255, 0, 0)
 						triggerClientEvent( source, "forceElementMoveUpdate", source )
-						triggerClientEvent( source, "finishItemMove", source )
+						finishMove()
 						return false
 					end
 				end
@@ -684,7 +687,8 @@ local function moveFromElement(element, slot, ammo, index)
 			if accountID and vehicleAccountID and accountID.id == vehicleAccountID.id and getElementData(source, "account:character:id") ~= getElementData(element, "owner") then
 				exports.global:sendWrnToStaff(getPlayerName(source):gsub("_", " ") .. " (" .. getElementData(source, "account:username") .. ") has attempted to take a " .. getItemName(item[1]) .. " from their alternate characters vehicle (#" .. getElementData(element, "dbid") .. ").", "ALT>ALT")
 				outputChatBox(" You are not allowed to take items from your alternate characters vehicle!", source, 255, 0, 0)
-				triggerClientEvent( source, event or "finishItemMove", source )
+				triggerClientEvent(source, event or "finishItemMove", source)
+				finishMove()
 				return false
 			end
 		end
@@ -722,12 +726,17 @@ local function moveFromElement(element, slot, ammo, index)
 						if getResourceFromName("shader_snow_ground") and getResourceState(getResourceFromName("shader_snow_ground")) == "running" then
 							local driver = getVehicleController(element)
 							local hasSnowTires = false --hasItem(element, 212)
-							triggerClientEvent(driver, "shader_snow_ground:applySlippery", root, element, hasSnowTires)
+							if isElement(driver) then triggerClientEvent(driver, "shader_snow_ground:applySlippery", root, element, hasSnowTires) end
 						end
 					end
 				end
 			end
 		elseif item[1] == -100 then
+			local itemArmor = tonumber(item[2])
+			if not itemArmor or itemArmor <= 0 then
+				finishMove()
+				return false
+			end
 			local faction = getElementData(source, "faction") or {}
 			local rank1 = type(faction[1]) == "table" and tonumber(faction[1].rank) or 0
 			local rank3 = type(faction[3]) == "table" and tonumber(faction[3].rank) or 0
@@ -740,25 +749,27 @@ local function moveFromElement(element, slot, ammo, index)
 			else
 				if not takeItemFromSlot(element, slot) then
 					outputChatBox("The armor item could not be removed from storage.", source, 255, 0, 0)
+					finishMove()
 					return false
 				end
-				local itemArmor = tonumber(item[2]) or 0
 				local leftover = math.max(0, itemArmor - armor)
 				if leftover > 0 and not giveItem(element, item[1], leftover) then
 					if not giveItem(element, item[1], itemArmor) then
 						outputDebugString("[item-system] Failed to restore armor item after storage transfer error.", 1)
 					end
+					finishMove()
 					return false
 				end
 				output(element, source, item[1], nil, nil, item[5])
 				setPedArmor(source, math.ceil(getPedArmor(source) + math.min(itemArmor, armor)))
-				exports.logs:dbLog(source, 39, source, name .. " #" .. getElementID(element) .. "->" .. getPlayerName( source ) .. " - " .. getItemName( item[1], item[2], item[5] ) .. " - " .. ( math.min( item[2], armor ) ))
+				exports.logs:dbLog(source, 39, source, name .. " #" .. getElementID(element) .. "->" .. getPlayerName( source ) .. " - " .. getItemName( item[1], item[2], item[5] ) .. " - " .. ( math.min(itemArmor, armor) ))
 			end
 			triggerClientEvent( source, "forceElementMoveUpdate", source )
 		else
 			local itemAmmo = tonumber(item[2]) or 0
 			if not takeItemFromSlot(element, slot) then
 				outputChatBox("The ammunition item could not be removed from storage.", source, 255, 0, 0)
+				finishMove()
 				return false
 			end
 			if ammo < itemAmmo then
@@ -766,6 +777,7 @@ local function moveFromElement(element, slot, ammo, index)
 					if not giveItem(element, item[1], itemAmmo) then
 						outputDebugString("[item-system] Failed to restore ammunition item after weapon grant failure.", 1)
 					end
+					finishMove()
 					return false
 				end
 				if not giveItem(element, item[1], itemAmmo - ammo) then
@@ -779,6 +791,7 @@ local function moveFromElement(element, slot, ammo, index)
 					if not giveItem(element, item[1], itemAmmo) then
 						outputDebugString("[item-system] Failed to restore ammunition item after weapon grant failure.", 1)
 					end
+					finishMove()
 					return false
 				end
 				exports.logs:dbLog(source, 39, {source, element}, name .. " #" .. getElementID(element) .. "->" .. getPlayerName(source) .. " - " .. getItemName(item[1], item[2], item[5]) .. " - " .. itemAmmo)
