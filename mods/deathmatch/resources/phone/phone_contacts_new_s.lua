@@ -1,23 +1,33 @@
 --MAXIME
 
+local addContactCooldown = setmetatable({}, { __mode = "k" })
+
 addEvent("phone:addContact", true)
 function addPhoneContact(name, number, phoneBookPhone)
 	if client then
 		phoneBookPhone = tonumber(phoneBookPhone)
 		if not isElement(client) or tonumber(getElementData(client, "loggedin")) ~= 1
-			or not phoneBookPhone or phoneBookPhone < 10000 or phoneBookPhone ~= math.floor(phoneBookPhone)
+			or not phoneBookPhone or phoneBookPhone < 10000 or phoneBookPhone > 999999999999999 or phoneBookPhone ~= math.floor(phoneBookPhone)
 			or type(name) ~= "string" or #name < 1 or #name > 50
 			or (type(number) ~= "string" and type(number) ~= "number")
 			or not tostring(number):match("^%d%d%d%d%d%d?%d?%d?%d?%d?%d?%d?%d?%d?$") then
 			triggerClientEvent(client, "phone:addContactResponse", client, false)
 			return false
 		end
-		if not phoneBookPhone then
+		if isTimer(addContactCooldown[client]) then
 			triggerClientEvent(client, "phone:addContactResponse", client, false)
-			return
+			return false
 		end
-		
-		if not exports.global:hasItem(client,2, tonumber(phoneBookPhone)) then
+		addContactCooldown[client] = setTimer(function(player)
+			addContactCooldown[player] = nil
+		end, 1000, 1, client)
+		name = name:gsub("[%c]", " "):gsub("^%s+", ""):gsub("%s+$", "")
+		if name == "" then
+			triggerClientEvent(client, "phone:addContactResponse", client, false)
+			return false
+		end
+
+		if not exports.global:hasItem(client, 2, phoneBookPhone) then
 			triggerClientEvent(client, "phone:slidePhoneOut", client)
 			return
 		end
