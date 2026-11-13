@@ -481,17 +481,28 @@ addCommandHandler("dutyadmin", adminDuty, false, false)
 
 function saveChanges()
 	outputDebugString("[Factions] Saving duty allow changes...")
-	local tick = getTickCount()
-
-	for key,value in pairs(dutyAllowChanges) do
-		if value[2] == 0 then -- Delete row
-			mysql:query_free("DELETE FROM duty_allowed WHERE id="..mysql:escape_string(tonumber(value[3])))
-		elseif value[2] == 1 then
-			mysql:query_free("INSERT INTO duty_allowed SET id="..mysql:escape_string(tonumber(value[3]))..", faction="..mysql:escape_string(tonumber(value[1]))..", itemID="..mysql:escape_string(tonumber(value[4]))..", itemValue='"..mysql:escape_string(value[5]).."'")
+	local startedAt = getTickCount()
+	local success = true
+	local connection = exports.mysql:getConn("mta")
+	for _, value in pairs(dutyAllowChanges) do
+		local factionID = tonumber(value[1])
+		local action = tonumber(value[2])
+		local rowID = tonumber(value[3])
+		local querySucceeded = false
+		if action == 0 then
+			querySucceeded = dbExec(connection, "DELETE FROM duty_allowed WHERE id = ? AND faction = ?", rowID, factionID)
+		elseif action == 1 then
+			querySucceeded = dbExec(connection,
+				"INSERT INTO duty_allowed (id, faction, itemID, itemValue) VALUES (?, ?, ?, ?) ON DUPLICATE KEY UPDATE faction = VALUES(faction), itemID = VALUES(itemID), itemValue = VALUES(itemValue)",
+				rowID, factionID, tonumber(value[4]), tostring(value[5]))
+		end
+		if not querySucceeded then
+			success = false
+			outputDebugString("[Factions] Failed to persist duty permission row " .. tostring(rowID), 1)
 		end
 	end
-
-	outputDebugString("[Factions] Completed in ".. math.floor((getTickCount()-tick)/60) .." seconds.")
+	outputDebugString("[Factions] Duty allow save completed in " .. math.floor((getTickCount() - startedAt) / 60) .. " seconds.")
+	return success
 end
 addEventHandler("onResourceStop", resourceRoot, saveChanges)
 
@@ -560,8 +571,14 @@ function updateTable(newTable, changesTable)
 		end
 	end
 
+	local previousDutyAllow = dutyAllow
 	dutyAllow = newTable
 	dutyAllowChanges = changesTable
+	if not saveChanges() then
+		outputChatBox("Some duty permissions could not be saved. The changes remain pending; please retry or contact a scripter.", player, 255, 0, 0)
+		return false
+	end
+	dutyAllowChanges = {}
 	removeElementData(resourceRoot, "dutyadmin")
 	dutyAdminEditor = nil
 	setElementData(resourceRoot, "dutyAllowTable", dutyAllow)
