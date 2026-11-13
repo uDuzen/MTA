@@ -1,5 +1,5 @@
 mysql = exports.mysql
-local lockTimer = nil
+local vehicleLockTimers = setmetatable({}, { __mode = "k" })
 chDimension = 125
 chInterior = 3
 
@@ -36,15 +36,26 @@ function givePlayerJob(jobID)
 		return false
 	end
 	local charID = tonumber(getElementData(player, "dbid"))
-	if not charID or charID < 1 then return false end
-	mysql:query_free("UPDATE `characters` SET `job`='"..jobID.."' WHERE `id`='"..charID.."' ")
+	if not charID or charID < 1 or charID ~= math.floor(charID) then return false end
+	if not mysql:query_free("UPDATE `characters` SET `job` = " .. jobID .. " WHERE `id` = " .. charID .. " AND `job` = 0") then
+		return false
+	end
 	if jobID == 4 then -- CITY MAINTENANCE
-		exports.global:giveItem(player, 115, "41:1:Spraycan", 2500)
+		if not exports.global:giveItem(player, 115, "41:1:Spraycan") then
+			mysql:query_free("UPDATE characters SET job = 0 WHERE id = " .. charID .. " AND job = 4")
+			return false
+		end
+		if not mysql:query_free("UPDATE characters SET tag = 9 WHERE id = " .. charID) then
+			exports.global:takeItem(player, 115, "41:1:Spraycan")
+			mysql:query_free("UPDATE characters SET job = 0 WHERE id = " .. charID .. " AND job = 4")
+			return false
+		end
 		outputChatBox("Use this spray to paint over the graffiti you find.", player, 255, 194, 14)
 		exports.anticheat:changeProtectedElementDataEx(player, "tag", 9, false)
-		mysql:query_free("UPDATE characters SET tag=9 WHERE id = " .. charID)
 	end
-	fetchJobInfoForOnePlayer(player)
+	if not fetchJobInfoForOnePlayer(player) then
+		outputDebugString("[Job system] Job was saved but player job data could not be refreshed for " .. getPlayerName(player), 1)
+	end
 	return true
 end
 addEvent("acceptJob", true)
@@ -59,8 +70,10 @@ function fetchJobInfo()
 end
 
 function fetchJobInfoForOnePlayer(thePlayer)
-	local charID = getElementData(thePlayer, "dbid")
-	local jobInfo = mysql:query_fetch_assoc("SELECT `job` , `jobID`, `jobLevel`, `jobProgress`, `jobTruckingRuns` FROM `characters` LEFT JOIN `jobs` ON `id` = `jobCharID` AND `job` = `jobID` WHERE `id`='" .. tostring(charID) .. "' ")
+	if not isElement(thePlayer) or getElementType(thePlayer) ~= "player" then return false end
+	local charID = tonumber(getElementData(thePlayer, "dbid"))
+	if not charID or charID < 1 or charID ~= math.floor(charID) then return false end
+	local jobInfo = mysql:query_fetch_assoc("SELECT characters.`job`, jobs.`jobID`, jobs.`jobLevel`, jobs.`jobProgress`, jobs.`jobTruckingRuns` FROM `characters` LEFT JOIN `jobs` ON characters.`id` = jobs.`jobCharID` AND characters.`job` = jobs.`jobID` WHERE characters.`id` = " .. charID .. " LIMIT 1")
 	if jobInfo then
 		local job = tonumber(jobInfo["job"])
 		local jobID = tonumber(jobInfo["jobID"])
@@ -98,12 +111,12 @@ addCommandHandler("myjob", printJobInfo)
 function quitJob(source)
 	local logged = getElementData(source, "loggedin")
 	if logged == 1 then
-		local job = getElementData(source, "job")
+		local job = tonumber(getElementData(source, "job")) or 0
 		if job == 0 then
 			outputChatBox("You are currently unemployed.", source, 255, 0, 0)
 		else
 			local charID = getElementData(source, "dbid")
-			mysql:query_free("UPDATE `characters` SET `job`='0' WHERE `id`='"..mysql:escape_string(charID).."' ")
+			mysql:query_free("UPDATE `characters` SET `job` = 0 WHERE `id` = " .. tonumber(charID))
 			fetchJobInfoForOnePlayer(source)
 			if job == 4 then
 				exports.anticheat:changeProtectedElementDataEx(source, "tag", 1, false)
@@ -117,11 +130,14 @@ addCommandHandler("endjob", quitJob, false, false)
 addCommandHandler("quitjob", quitJob, false, false)
 
 -- PREVENT UNEMPLOYED PLAYER GETTING IN DRIVER SEAT OR JACKING JOB VEHICLES -- MAXIME
-function startEnterVehJob(thePlayer, seat, jacked) 
+function startEnterVehJob(thePlayer, seat, jacked)
+	if not isElement(source) or getElementType(source) ~= "vehicle" or not isElement(thePlayer)
+		or getElementType(thePlayer) ~= "player" then return end
 	local vjob = tonumber(getElementData(source, "job")) or 0
-	local job = getElementData(thePlayer, "job")
-	local seat = getPedOccupiedVehicleSeat(thePlayer) or 0
-	if vjob>0 and job~=vjob and seat == 0 and not (getElementData(thePlayer, "duty_admin") == 1) and not (getElementData(thePlayer, "duty_supporter") == 1) then
+	local job = tonumber(getElementData(thePlayer, "job")) or 0
+	if vjob > 0 and job ~= vjob and tonumber(seat) == 0
+		and tonumber(getElementData(thePlayer, "duty_admin")) ~= 1
+		and tonumber(getElementData(thePlayer, "duty_supporter")) ~= 1 then
 		if (vjob==1) then
 			outputChatBox("You are not a delivery driver. Visit city hall to obtain this job.", thePlayer, 255, 0, 0)
 		elseif (vjob==2) then
@@ -129,15 +145,23 @@ function startEnterVehJob(thePlayer, seat, jacked)
 		elseif (vjob==3) then
 			outputChatBox("You are not a bus driver. Visit city hall to obtain this job.", thePlayer, 255, 0, 0)
 		end
-		if isTimer(lockTimer) then
-			killTimer(lockTimer)
-			lockTimer = nil
+		if not isVehicleLocked(source) and not isTimer(vehicleLockTimers[source]) then
+			setVehicleLocked(source, true)
+			vehicleLockTimers[source] = setTimer(function(vehicle)
+				if isElement(vehicle) then setVehicleLocked(vehicle, false) end
+				vehicleLockTimers[vehicle] = nil
+			end, 5000, 1, source)
 		end
-		setVehicleLocked(source, true)
-		lockTimer = setTimer(setVehicleLocked, 5000, 1, source, false)
 	end
 end
 addEventHandler("onVehicleStartEnter", getRootElement(), startEnterVehJob)
+
+addEventHandler("onElementDestroy", root, function()
+	if getElementType(source) == "vehicle" and isTimer(vehicleLockTimers[source]) then
+		killTimer(vehicleLockTimers[source])
+		vehicleLockTimers[source] = nil
+	end
+end)
 
 --[[ -- Removed by MAXIME  
 function resetContract( thePlayer, commandName, targetPlayerName )
